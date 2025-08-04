@@ -17,9 +17,10 @@
 ./install-configs.sh --auto-hardware
 ```
 - Автоматически генерирует `hardware-configuration.nix` для текущего оборудования
-- Использует `nixos-generate-config` для определения аппаратной конфигурации
+- Использует `nixos-generate-config` для определения аппаратной конфигурации  
 - **Рекомендуется для VirtualBox или нового оборудования**
 - Не требует наличие `hardware-configuration.nix` в репозитории
+- При неудаче автодетекции создает fallback конфигурацию, которую нужно проверить
 
 ### 3. Пропуск копирования
 ```bash
@@ -66,4 +67,42 @@ sudo ./install-configs.sh --skip-hardware
 ### Полная установка с репозиторной hardware конфигурацией
 ```bash
 sudo ./install-configs.sh
+```
+
+## Устранение неисправностей
+
+### Ошибка "nixos-generate-config failed"
+Если автогенерация не удалась, скрипт автоматически создаст fallback конфигурацию:
+
+1. **Для VirtualBox**: Создается оптимизированная конфигурация
+2. **Для обычного ПК**: Создается базовая конфигурация
+
+**Важно**: После создания fallback конфигурации проверьте:
+```bash
+# Проверьте доступные диски
+lsblk
+
+# Или используйте fdisk
+sudo fdisk -l
+
+# Отредактируйте конфигурацию при необходимости
+sudo nano /etc/nixos/hardware-configuration.nix
+```
+
+### Ручная генерация hardware конфигурации
+Если автоматические методы не работают:
+```bash
+# Попробуйте сгенерировать вручную
+sudo nixos-generate-config
+
+# Или только показать конфигурацию
+sudo nixos-generate-config --show-hardware-config
+```
+
+### Проверка синтаксиса
+Перед применением конфигурации:
+```bash
+# Проверка синтаксиса
+sudo nix-instantiate --parse /etc/nixos/configuration.nix
+sudo nix-instantiate --parse /etc/nixos/hardware-configuration.nix
 ```

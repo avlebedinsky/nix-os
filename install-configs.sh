@@ -706,6 +706,18 @@ final_report() {
     echo "- Kitty configuration set up with UTF-8"
     echo "- Environment variables added for proper display"
     
+    # Check if fallback hardware config was used
+    if [[ -f "/etc/nixos/hardware-configuration.nix" ]] && grep -q "auto-generated fallback" "/etc/nixos/hardware-configuration.nix"; then
+        echo
+        echo -e "${YELLOW}⚠️  Hardware Configuration Notice:${NC}"
+        echo "A fallback hardware configuration was created because auto-detection failed."
+        echo "Please review and adjust the following in /etc/nixos/hardware-configuration.nix:"
+        echo "- File system device paths (check with 'lsblk' or 'fdisk -l')"
+        echo "- Boot partition settings"
+        echo "- Swap configuration if needed"
+        echo "- Run 'sudo nixos-generate-config' manually if issues persist"
+    fi
+    
     echo
     echo -e "${GREEN}Installation completed successfully!${NC}"
 }
