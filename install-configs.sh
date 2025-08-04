@@ -115,6 +115,16 @@ check_nix_syntax() {
     
     log_info "Checking syntax: $description"
     
+    # Check for placeholder UUIDs in hardware-configuration.nix
+    if [[ "$file" == "hardware-configuration.nix" ]]; then
+        if grep -q "your-.*-uuid-here" "$file"; then
+            log_error "CRITICAL: Found placeholder UUIDs in $file"
+            log_error "This will cause system boot failure!"
+            log_info "Please generate proper hardware configuration with: nixos-generate-config"
+            return 1
+        fi
+    fi
+    
     # Basic check for correct braces
     local open_braces=$(grep -o '{' "$file" | wc -l)
     local close_braces=$(grep -o '}' "$file" | wc -l)
@@ -122,6 +132,22 @@ check_nix_syntax() {
     if [[ "$open_braces" -ne "$close_braces" ]]; then
         log_error "Brace mismatch in $file: opening=$open_braces, closing=$close_braces"
         return 1
+    fi
+    
+    # Check for problematic packages
+    if grep -q "locale$" "$file"; then
+        log_warning "Found 'locale' package which may not exist - removing"
+        sed -i '/locale$/d' "$file"
+    fi
+    
+    # Check for duplicate VirtualBox settings
+    if [[ "$file" == "configuration.nix" ]]; then
+        local vbox_count=$(grep -c "virtualisation.virtualbox.guest.enable" "$file" || echo "0")
+        if [[ "$vbox_count" -gt 1 ]]; then
+            log_warning "Found duplicate VirtualBox guest settings - fixing"
+            # Keep only the first occurrence
+            sed -i '0,/virtualisation.virtualbox.guest.enable = true;/!{/virtualisation.virtualbox.guest.enable = true;/d;}' "$file"
+        fi
     fi
     
     # Check for unclosed strings

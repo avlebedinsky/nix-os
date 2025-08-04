@@ -14,25 +14,28 @@
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 
-  # File systems configuration (update UUIDs after installation)
+  # File systems configuration 
+  # IMPORTANT: These need to be updated with actual UUIDs from your system
+  # Run: sudo blkid to get the correct UUIDs
   fileSystems."/" =
-    { device = "/dev/disk/by-uuid/your-root-uuid-here";
+    { device = "/dev/sda1";  # Using device path instead of UUID temporarily
       fsType = "ext4";
     };
 
   fileSystems."/boot" =
-    { device = "/dev/disk/by-uuid/your-boot-uuid-here";
+    { device = "/dev/sda2";  # Using device path instead of UUID temporarily
       fsType = "vfat";
+      options = [ "fmask=0022" "dmask=0022" ];
     };
 
-  swapDevices =
-    [ { device = "/dev/disk/by-uuid/your-swap-uuid-here"; }
-    ];
+  # Swap configuration - comment out if no swap
+  # swapDevices = [ { device = "/dev/sda3"; } ];
+  swapDevices = [ ];
 
   # VirtualBox specific optimizations
   # Enable VirtualBox Guest Additions
   virtualisation.virtualbox.guest.enable = true;
-  # Note: x11 option is deprecated in NixOS 25.05+
+  virtualisation.virtualbox.guest.dragAndDrop = true;
 
   # Networking for VirtualBox
   networking.useDHCP = lib.mkDefault true;
