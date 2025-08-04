@@ -49,6 +49,50 @@ echo -e "${GREEN}║            Automatic NixOS + Hyprland Installation         
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo
 
+# Parse command line arguments
+SKIP_HARDWARE_COPY=false
+AUTO_GENERATE_HARDWARE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --skip-hardware)
+            SKIP_HARDWARE_COPY=true
+            shift
+            ;;
+        --auto-hardware)
+            AUTO_GENERATE_HARDWARE=true
+            shift
+            ;;
+        --help|-h)
+            echo "NixOS + Hyprland Configuration Installation Script"
+            echo
+            echo "Usage: $0 [OPTIONS]"
+            echo
+            echo "Options:"
+            echo "  --skip-hardware     Skip copying hardware-configuration.nix from repository"
+            echo "                      Use existing /etc/nixos/hardware-configuration.nix"
+            echo
+            echo "  --auto-hardware     Auto-generate hardware-configuration.nix using"
+            echo "                      nixos-generate-config (recommended for new systems)"
+            echo
+            echo "  --help, -h          Show this help message"
+            echo
+            echo "Examples:"
+            echo "  $0                        # Copy all configs from repository (default)"
+            echo "  $0 --auto-hardware       # Auto-generate hardware config"
+            echo "  $0 --skip-hardware       # Keep existing hardware config"
+            echo
+            echo "Note: Auto-generation is recommended for VirtualBox or when setting up"
+            echo "      on different hardware than the repository was created for."
+            exit 0
+            ;;
+        *)
+            log_warning "Unknown option: $1"
+            shift
+            ;;
+    esac
+done
+
 # Check root privileges
 check_root "$@"
 
@@ -71,6 +115,15 @@ if [[ ! -f "configuration.nix" || ! -f "hyprland.conf" ]]; then
     log_info "Current directory: $(pwd)"
     log_info "Expected files: configuration.nix, hyprland.conf"
     exit 1
+fi
+
+# Additional check for hardware configuration based on options
+if [[ "$AUTO_GENERATE_HARDWARE" != "true" && "$SKIP_HARDWARE_COPY" != "true" && ! -f "hardware-configuration.nix" ]]; then
+    log_warning "hardware-configuration.nix not found in repository"
+    log_info "Use --auto-hardware to generate automatically, or --skip-hardware to use existing"
+    log_info "Available options:"
+    log_info "  $0 --auto-hardware    # Auto-generate hardware config"
+    log_info "  $0 --skip-hardware    # Use existing hardware config"
 fi
 
 # Function to check and fix compatibility for NixOS 25.05+
@@ -101,6 +154,59 @@ fix_nixos_25_compatibility() {
     fi
     
     return 0
+}
+
+# Function to automatically generate hardware configuration
+generate_hardware_config() {
+    local target_file="$1"
+    log_info "Generating hardware configuration automatically..."
+    
+    # Check if we have the required permissions
+    if [[ $EUID -ne 0 ]]; then
+        log_error "Root privileges required for hardware configuration generation"
+        return 1
+    fi
+    
+    # Generate hardware configuration using nixos-generate-config
+    if command -v nixos-generate-config &> /dev/null; then
+        log_info "Running nixos-generate-config to detect hardware..."
+        
+        # Create temporary directory for generation
+        local temp_dir=$(mktemp -d)
+        
+        # Generate config in temporary directory
+        if nixos-generate-config --root / --dir "$temp_dir" 2>/dev/null; then
+            if [[ -f "$temp_dir/hardware-configuration.nix" ]]; then
+                # Create target directory if it doesn't exist
+                mkdir -p "$(dirname "$target_file")"
+                
+                # Copy generated config to target location
+                cp "$temp_dir/hardware-configuration.nix" "$target_file"
+                
+                # Set appropriate permissions
+                chmod 644 "$target_file"
+                
+                log_success "Hardware configuration generated successfully"
+                log_info "Generated file: $target_file"
+                
+                # Clean up
+                rm -rf "$temp_dir"
+                return 0
+            else
+                log_error "Failed to generate hardware-configuration.nix"
+                rm -rf "$temp_dir"
+                return 1
+            fi
+        else
+            log_error "nixos-generate-config failed"
+            rm -rf "$temp_dir"
+            return 1
+        fi
+    else
+        log_error "nixos-generate-config not found"
+        log_info "Make sure you're running this on a NixOS system"
+        return 1
+    fi
 }
 
 # Function to check Nix files syntax
@@ -210,8 +316,38 @@ install_system_configs() {
         fix_nixos_25_compatibility "configuration.nix"
     fi
     
-    if [[ -f "hardware-configuration.nix" ]]; then
+    # Handle hardware configuration based on options
+    local hardware_handled=false
+    
+    if [[ "$AUTO_GENERATE_HARDWARE" == "true" ]]; then
+        log_info "Auto-generating hardware configuration..."
+        if generate_hardware_config "/etc/nixos/hardware-configuration.nix"; then
+            hardware_handled=true
+            log_success "Hardware configuration auto-generated"
+        else
+            log_error "Failed to auto-generate hardware configuration"
+            return 1
+        fi
+    elif [[ "$SKIP_HARDWARE_COPY" == "true" ]]; then
+        log_info "Skipping hardware configuration copy as requested"
+        if [[ ! -f "/etc/nixos/hardware-configuration.nix" ]]; then
+            log_warning "No existing hardware-configuration.nix found"
+            log_info "Consider using --auto-hardware option or run 'nixos-generate-config' manually"
+        fi
+        hardware_handled=true
+    elif [[ -f "hardware-configuration.nix" ]]; then
+        # Traditional behavior - copy existing file
         fix_nixos_25_compatibility "hardware-configuration.nix"
+        if ! check_nix_syntax "hardware-configuration.nix" "hardware-configuration.nix"; then
+            log_error "Syntax error in hardware-configuration.nix"
+            return 1
+        fi
+        
+        # Create backup and copy
+        backup_file "/etc/nixos/hardware-configuration.nix"
+        safe_copy "hardware-configuration.nix" "/etc/nixos/hardware-configuration.nix"
+        hardware_handled=true
+        log_success "Hardware configuration copied from repository"
     fi
     
     # Check file syntax before installation
@@ -220,25 +356,23 @@ install_system_configs() {
         return 1
     fi
     
-    if [[ -f "hardware-configuration.nix" ]]; then
-        if ! check_nix_syntax "hardware-configuration.nix" "hardware-configuration.nix"; then
-            log_error "Syntax error in hardware-configuration.nix"
-            return 1
-        fi
+    # Verify that we have a hardware configuration
+    if [[ ! -f "/etc/nixos/hardware-configuration.nix" ]]; then
+        log_error "No hardware-configuration.nix found and none was created"
+        log_info "Use --auto-hardware to generate one automatically"
+        return 1
     fi
     
-    # Create backups of existing configurations
+    # Create backup of existing configuration
     backup_file "/etc/nixos/configuration.nix"
-    backup_file "/etc/nixos/hardware-configuration.nix"
     
-    # Copy new configurations
+    # Copy new main configuration
     safe_copy "configuration.nix" "/etc/nixos/configuration.nix"
     
-    if [[ -f "hardware-configuration.nix" ]]; then
-        safe_copy "hardware-configuration.nix" "/etc/nixos/hardware-configuration.nix"
-        log_success "System configurations installed"
+    if [[ "$hardware_handled" == "true" ]]; then
+        log_success "System configurations installed successfully"
     else
-        log_warning "hardware-configuration.nix not found, using existing one"
+        log_warning "hardware-configuration.nix not found in repository, using existing one"
     fi
     
     return 0
@@ -384,7 +518,19 @@ final_report() {
     
     # Check system files
     [[ -f "/etc/nixos/configuration.nix" ]] && echo "  ✓ /etc/nixos/configuration.nix"
-    [[ -f "/etc/nixos/hardware-configuration.nix" ]] && echo "  ✓ /etc/nixos/hardware-configuration.nix"
+    
+    # Hardware configuration with status
+    if [[ -f "/etc/nixos/hardware-configuration.nix" ]]; then
+        if [[ "$AUTO_GENERATE_HARDWARE" == "true" ]]; then
+            echo "  ✓ /etc/nixos/hardware-configuration.nix (auto-generated)"
+        elif [[ "$SKIP_HARDWARE_COPY" == "true" ]]; then
+            echo "  ✓ /etc/nixos/hardware-configuration.nix (existing, not modified)"
+        else
+            echo "  ✓ /etc/nixos/hardware-configuration.nix (copied from repository)"
+        fi
+    else
+        echo "  ⚠ /etc/nixos/hardware-configuration.nix (missing)"
+    fi
     
     # Check user files
     [[ -f "$USER_HOME/.config/hypr/hyprland.conf" ]] && echo "  ✓ $USER_HOME/.config/hypr/hyprland.conf"
