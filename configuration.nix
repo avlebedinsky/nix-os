@@ -114,6 +114,10 @@
 
   # VirtualBox specific services
   services.spice-vdagentd.enable = true;
+  
+  # VirtualBox guest additions
+  virtualisation.virtualbox.guest.enable = true;
+  virtualisation.virtualbox.guest.dragAndDrop = true;
 
   # Define a user account. Don't forget to set a password with 'passwd'.
   users.users.lav = {
@@ -180,9 +184,6 @@
     
     # Development tools (optional)
     vscode
-    
-    # VirtualBox specific tools
-    virtualbox-guest-additions-iso
   ];
 
   # Fonts configuration
