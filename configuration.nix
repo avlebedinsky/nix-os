@@ -86,10 +86,11 @@
   };
 
   # Define a user account. Don't forget to set a password with 'passwd'.
-  users.users.user = {
+  users.users.avleb = {
     isNormalUser = true;
-    description = "User";
-    extraGroups = [ "networkmanager" "wheel" ];
+    description = "Avleb";
+    extraGroups = [ "networkmanager" "wheel" "video" "audio" ];
+    password = "123456";  # Временный пароль, смените после первого входа
     packages = with pkgs; [
       firefox
       tree
@@ -159,7 +160,14 @@
   ];
 
   # Enable automatic login for the user.
-  services.getty.autologinUser = "user";
+  services.getty.autologinUser = "avleb";
+  
+  # Auto start Hyprland on TTY1 login
+  environment.loginShellInit = ''
+    if [ -z $DISPLAY ] && [ "$(tty)" = "/dev/tty1" ]; then
+      exec Hyprland
+    fi
+  '';
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
