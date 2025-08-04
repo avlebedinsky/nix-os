@@ -156,6 +156,116 @@ fix_nixos_25_compatibility() {
     return 0
 }
 
+# Function to create fallback hardware configuration
+create_fallback_hardware_config() {
+    local target_file="$1"
+    log_warning "Creating fallback hardware configuration..."
+    
+    # Detect if we're in VirtualBox
+    local is_virtualbox=false
+    if command -v systemd-detect-virt &> /dev/null; then
+        local virt_type=$(systemd-detect-virt 2>/dev/null || echo "none")
+        if [[ "$virt_type" == "oracle" ]]; then
+            is_virtualbox=true
+            log_info "VirtualBox detected, using VirtualBox-optimized config"
+        fi
+    fi
+    
+    # Use existing hardware-configuration.nix as template if available
+    if [[ -f "hardware-configuration.nix" ]]; then
+        log_info "Using repository hardware-configuration.nix as fallback"
+        cp "hardware-configuration.nix" "$target_file"
+        chmod 644 "$target_file"
+        return 0
+    fi
+    
+    # Create basic hardware configuration
+    local hw_config=""
+    if [[ "$is_virtualbox" == "true" ]]; then
+        # VirtualBox configuration
+        hw_config='# Hardware configuration for VirtualBox (auto-generated fallback)
+{ config, lib, pkgs, modulesPath, ... }:
+
+{
+  imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
+
+  # Boot configuration for VirtualBox
+  boot.initrd.availableKernelModules = [ "ata_piix" "ohci_pci" "ehci_pci" "ahci" "sd_mod" "sr_mod" ];
+  boot.initrd.kernelModules = [ ];
+  boot.kernelModules = [ ];
+  boot.extraModulePackages = [ ];
+
+  # File systems - adapt these to your actual setup
+  fileSystems."/" = {
+    device = "/dev/disk/by-label/nixos";
+    fsType = "ext4";
+    options = [ "defaults" ];
+  };
+
+  fileSystems."/boot" = {
+    device = "/dev/disk/by-label/boot";
+    fsType = "vfat";
+    options = [ "defaults" ];
+  };
+
+  swapDevices = [ ];
+
+  # VirtualBox Guest Additions
+  virtualisation.virtualbox.guest.enable = true;
+  virtualisation.virtualbox.guest.dragAndDrop = true;
+
+  networking.useDHCP = lib.mkDefault true;
+  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+  powerManagement.cpuFreqGovernor = lib.mkDefault "performance";
+}'
+    else
+        # Generic configuration
+        hw_config='# Hardware configuration (auto-generated fallback)
+{ config, lib, pkgs, modulesPath, ... }:
+
+{
+  imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
+
+  # Generic boot configuration
+  boot.initrd.availableKernelModules = [ "xhci_pci" "ehci_pci" "ahci" "usb_storage" "sd_mod" "sr_mod" ];
+  boot.initrd.kernelModules = [ ];
+  boot.kernelModules = [ ];
+  boot.extraModulePackages = [ ];
+
+  # File systems - IMPORTANT: Adapt these to your actual setup
+  fileSystems."/" = {
+    device = "/dev/disk/by-label/nixos";
+    fsType = "ext4";
+    options = [ "defaults" ];
+  };
+
+  fileSystems."/boot" = {
+    device = "/dev/disk/by-label/boot";
+    fsType = "vfat";
+    options = [ "defaults" ];
+  };
+
+  swapDevices = [ ];
+
+  networking.useDHCP = lib.mkDefault true;
+  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+  powerManagement.cpuFreqGovernor = lib.mkDefault "ondemand";
+}'
+    fi
+    
+    # Write the configuration
+    echo "$hw_config" > "$target_file"
+    chmod 644 "$target_file"
+    
+    log_warning "Fallback hardware configuration created"
+    log_warning "IMPORTANT: Review and adjust file system paths in $target_file"
+    if [[ "$is_virtualbox" != "true" ]]; then
+        log_warning "Generic config created - may need manual adjustment"
+    fi
+    
+    return 0
+}
+
 # Function to automatically generate hardware configuration
 generate_hardware_config() {
     local target_file="$1"
@@ -171,15 +281,30 @@ generate_hardware_config() {
     if command -v nixos-generate-config &> /dev/null; then
         log_info "Running nixos-generate-config to detect hardware..."
         
-        # Create temporary directory for generation
+        # Create target directory if it doesn't exist
+        mkdir -p "$(dirname "$target_file")"
+        
+        # Try to generate config directly to target location first
+        log_info "Attempting direct generation to $target_file..."
+        if nixos-generate-config --root / --dir "$(dirname "$target_file")" 2>&1; then
+            if [[ -f "$target_file" ]]; then
+                # Set appropriate permissions
+                chmod 644 "$target_file"
+                log_success "Hardware configuration generated successfully"
+                log_info "Generated file: $target_file"
+                return 0
+            fi
+        fi
+        
+        log_warning "Direct generation failed, trying with temporary directory..."
+        
+        # Fallback: Create temporary directory for generation
         local temp_dir=$(mktemp -d)
         
-        # Generate config in temporary directory
-        if nixos-generate-config --root / --dir "$temp_dir" 2>/dev/null; then
+        # Generate config in temporary directory with verbose output
+        log_info "Using temporary directory: $temp_dir"
+        if nixos-generate-config --root / --dir "$temp_dir" 2>&1; then
             if [[ -f "$temp_dir/hardware-configuration.nix" ]]; then
-                # Create target directory if it doesn't exist
-                mkdir -p "$(dirname "$target_file")"
-                
                 # Copy generated config to target location
                 cp "$temp_dir/hardware-configuration.nix" "$target_file"
                 
@@ -193,18 +318,35 @@ generate_hardware_config() {
                 rm -rf "$temp_dir"
                 return 0
             else
-                log_error "Failed to generate hardware-configuration.nix"
+                log_error "No hardware-configuration.nix found in $temp_dir"
+                log_info "Contents of temp directory:"
+                ls -la "$temp_dir" 2>/dev/null || true
                 rm -rf "$temp_dir"
-                return 1
             fi
         else
-            log_error "nixos-generate-config failed"
+            log_error "nixos-generate-config command failed"
+            log_info "Trying alternative approach..."
             rm -rf "$temp_dir"
-            return 1
+            
+            # Try with current working directory
+            if nixos-generate-config --show-hardware-config > "$target_file" 2>&1; then
+                if [[ -s "$target_file" ]]; then
+                    chmod 644 "$target_file"
+                    log_success "Hardware configuration generated using --show-hardware-config"
+                    return 0
+                else
+                    log_error "Generated file is empty"
+                    rm -f "$target_file"
+                fi
+            fi
         fi
+        
+        log_error "All generation methods failed"
+        return 1
     else
         log_error "nixos-generate-config not found"
         log_info "Make sure you're running this on a NixOS system"
+        log_info "You can try installing with: nix-env -iA nixos.nixos-generate-config"
         return 1
     fi
 }
@@ -325,8 +467,14 @@ install_system_configs() {
             hardware_handled=true
             log_success "Hardware configuration auto-generated"
         else
-            log_error "Failed to auto-generate hardware configuration"
-            return 1
+            log_warning "Auto-generation failed, attempting fallback..."
+            if create_fallback_hardware_config "/etc/nixos/hardware-configuration.nix"; then
+                hardware_handled=true
+                log_success "Fallback hardware configuration created"
+            else
+                log_error "Failed to create hardware configuration"
+                return 1
+            fi
         fi
     elif [[ "$SKIP_HARDWARE_COPY" == "true" ]]; then
         log_info "Skipping hardware configuration copy as requested"
@@ -522,7 +670,12 @@ final_report() {
     # Hardware configuration with status
     if [[ -f "/etc/nixos/hardware-configuration.nix" ]]; then
         if [[ "$AUTO_GENERATE_HARDWARE" == "true" ]]; then
-            echo "  ✓ /etc/nixos/hardware-configuration.nix (auto-generated)"
+            # Check if it contains fallback indicator
+            if grep -q "auto-generated fallback" "/etc/nixos/hardware-configuration.nix"; then
+                echo "  ⚠ /etc/nixos/hardware-configuration.nix (fallback config - review required)"
+            else
+                echo "  ✓ /etc/nixos/hardware-configuration.nix (auto-generated)"
+            fi
         elif [[ "$SKIP_HARDWARE_COPY" == "true" ]]; then
             echo "  ✓ /etc/nixos/hardware-configuration.nix (existing, not modified)"
         else
