@@ -9,6 +9,7 @@ chmod +x diagnose-config.sh
 chmod +x fix-config.sh
 chmod +x fix-encoding.sh
 chmod +x test-encoding.sh
+chmod +x set-permissions.sh
 
 # Конфигурационные файлы должны быть читаемыми
 chmod 644 *.nix
@@ -20,8 +21,3 @@ chmod 644 *.css
 chmod 644 *.md
 
 echo "✅ Права доступа установлены"
-echo "📋 Исполняемые файлы:"
-ls -la *.sh
-
-echo "📋 Конфигурационные файлы:"
-ls -la *.nix *.conf *.json *.css
