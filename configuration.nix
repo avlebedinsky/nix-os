@@ -107,9 +107,6 @@
     liberation_ttf
   ];
 
-  # Allow unfree packages
-  nixpkgs.config.allowUnfree = true;
-
   # System version
   system.stateVersion = "24.05";
 }
