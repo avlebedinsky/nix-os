@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Быстрое исправление конфигурации NixOS
+
+# Цвета для вывода
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}Быстрое исправление конфигурации NixOS${NC}"
+
+# Проверка прав доступа
+if [[ $EUID -ne 0 ]]; then
+    echo -e "${RED}Этот скрипт должен быть запущен с правами root (sudo)${NC}"
+    exit 1
+fi
+
+CONFIG_FILE="/etc/nixos/configuration.nix"
+BACKUP_FILE="/etc/nixos/configuration.nix.backup.$(date +%Y%m%d-%H%M%S)"
+
+# Создание резервной копии
+echo -e "${YELLOW}Создание резервной копии...${NC}"
+if [[ -f "$CONFIG_FILE" ]]; then
+    cp "$CONFIG_FILE" "$BACKUP_FILE"
+    echo "Резервная копия создана: $BACKUP_FILE"
+else
+    echo -e "${RED}Файл конфигурации не найден: $CONFIG_FILE${NC}"
+    exit 1
+fi
+
+# Исправление устаревших опций
+echo -e "${YELLOW}Исправление устаревших опций...${NC}"
+
+# Проверка версии NixOS для совместимости
+if command -v nixos-version &> /dev/null; then
+    VERSION=$(nixos-version | grep -o '[0-9][0-9]\.[0-9][0-9]' | head -1)
+    MAJOR=$(echo $VERSION | cut -d. -f1)
+    MINOR=$(echo $VERSION | cut -d. -f2)
+    
+    echo "Обнаружена версия NixOS: $VERSION"
+    
+    if [[ $MAJOR -gt 24 ]] || [[ $MAJOR -eq 25 && $MINOR -ge 5 ]]; then
+        echo -e "${YELLOW}Применение исправлений для NixOS 25.05+...${NC}"
+        # Дополнительные исправления для NixOS 25.05+
+        NIXOS_25_FIXES="-e '/virtualisation\.virtualbox\.guest\.x11/d'"
+    else
+        NIXOS_25_FIXES=""
+    fi
+else
+    echo -e "${YELLOW}Не удалось определить версию NixOS${NC}"
+    NIXOS_25_FIXES=""
+fi
+
+# Временный файл для исправленной конфигурации
+TEMP_FILE=$(mktemp)
+
+# Удаление sound.enable и исправление hardware.opengl, hardware.pulseaudio, thunar, noto-fonts-cjk
+# Плюс исправления для NixOS 25.05+ если необходимо
+if [[ -n "$NIXOS_25_FIXES" ]]; then
+    eval "sed -e '/sound\.enable/d' \
+        -e 's/hardware\.opengl/hardware.graphics/g' \
+        -e 's/driSupport/enable32Bit/g' \
+        -e '/driSupport32Bit/d' \
+        -e 's/hardware\.pulseaudio/services.pulseaudio/g' \
+        -e 's/^\s*thunar$/    xfce.thunar/' \
+        -e 's/noto-fonts-cjk/noto-fonts-cjk-sans/g' \
+        $NIXOS_25_FIXES \
+        \"$CONFIG_FILE\" > \"$TEMP_FILE\""
+else
+    sed -e '/sound\.enable/d' \
+        -e 's/hardware\.opengl/hardware.graphics/g' \
+        -e 's/driSupport/enable32Bit/g' \
+        -e '/driSupport32Bit/d' \
+        -e 's/hardware\.pulseaudio/services.pulseaudio/g' \
+        -e 's/^\s*thunar$/    xfce.thunar/' \
+        -e 's/noto-fonts-cjk/noto-fonts-cjk-sans/g' \
+        "$CONFIG_FILE" > "$TEMP_FILE"
+fi
+
+# Проверка изменений
+if diff -q "$CONFIG_FILE" "$TEMP_FILE" > /dev/null; then
+    echo -e "${GREEN}Конфигурация уже корректна, изменения не требуются${NC}"
+    rm "$TEMP_FILE"
+    exit 0
+else
+    echo -e "${YELLOW}Найдены изменения, применяем исправления...${NC}"
+    mv "$TEMP_FILE" "$CONFIG_FILE"
+    echo -e "${GREEN}Конфигурация исправлена${NC}"
+fi
+
+# Проверка синтаксиса
+echo -e "${YELLOW}Проверка синтаксиса...${NC}"
+if nix-instantiate --parse "$CONFIG_FILE" &> /dev/null; then
+    echo -e "${GREEN}✓ Синтаксис корректен${NC}"
+else
+    echo -e "${RED}✗ Ошибка синтаксиса, восстанавливаем из резервной копии${NC}"
+    cp "$BACKUP_FILE" "$CONFIG_FILE"
+    exit 1
+fi
+
+# Тестовая сборка
+echo -e "${YELLOW}Выполнение тестовой сборки...${NC}"
+if nixos-rebuild dry-build; then
+    echo -e "${GREEN}✓ Тестовая сборка успешна${NC}"
+    echo
+    echo -e "${YELLOW}Теперь вы можете применить изменения:${NC}"
+    echo "sudo nixos-rebuild switch"
+else
+    echo -e "${RED}✗ Ошибка при тестовой сборке${NC}"
+    echo -e "${YELLOW}Восстанавливаем из резервной копии...${NC}"
+    cp "$BACKUP_FILE" "$CONFIG_FILE"
+    echo "Попробуйте использовать configuration-clean.nix:"
+    echo "sudo cp configuration-clean.nix /etc/nixos/configuration.nix"
+fi
+
+echo -e "${GREEN}Готово!${NC}"

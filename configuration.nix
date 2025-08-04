@@ -22,17 +22,37 @@
   time.timeZone = "Europe/Moscow";
 
   # Select internationalisation properties.
-  i18n.defaultLocale = "en_US.UTF-8";
-  i18n.extraLocaleSettings = {
-    LC_ADDRESS = "ru_RU.UTF-8";
-    LC_IDENTIFICATION = "ru_RU.UTF-8";
-    LC_MEASUREMENT = "ru_RU.UTF-8";
-    LC_MONETARY = "ru_RU.UTF-8";
-    LC_NAME = "ru_RU.UTF-8";
-    LC_NUMERIC = "ru_RU.UTF-8";
-    LC_PAPER = "ru_RU.UTF-8";
-    LC_TELEPHONE = "ru_RU.UTF-8";
-    LC_TIME = "ru_RU.UTF-8";
+  i18n = {
+    defaultLocale = "en_US.UTF-8";
+    extraLocaleSettings = {
+      LC_ADDRESS = "ru_RU.UTF-8";
+      LC_IDENTIFICATION = "ru_RU.UTF-8";
+      LC_MEASUREMENT = "ru_RU.UTF-8";
+      LC_MONETARY = "ru_RU.UTF-8";
+      LC_NAME = "ru_RU.UTF-8";
+      LC_NUMERIC = "ru_RU.UTF-8";
+      LC_PAPER = "ru_RU.UTF-8";
+      LC_TELEPHONE = "ru_RU.UTF-8";
+      LC_TIME = "ru_RU.UTF-8";
+    };
+    # Поддержка дополнительных локалей
+    supportedLocales = [
+      "en_US.UTF-8/UTF-8"
+      "ru_RU.UTF-8/UTF-8"
+      "C.UTF-8/UTF-8"
+    ];
+  };
+
+  # Переменные окружения для правильной работы с UTF-8
+  environment.variables = {
+    # Принудительное включение UTF-8
+    LANG = "en_US.UTF-8";
+    LC_ALL = "en_US.UTF-8";
+    # Для терминалов
+    TERM = "xterm-256color";
+    # Для правильного отображения русских символов в Hyprland
+    XKB_DEFAULT_LAYOUT = "us,ru";
+    XKB_DEFAULT_OPTIONS = "grp:alt_shift_toggle";
   };
 
   # Enable the X11 windowing system.
@@ -139,6 +159,9 @@
     wget
     curl
     neofetch
+    # Утилиты для работы с кодировками и локалями
+    glibc
+    locale
     
     # Fonts
     noto-fonts
@@ -163,14 +186,34 @@
   ];
 
   # Fonts configuration
-  fonts.packages = with pkgs; [
-    noto-fonts
-    noto-fonts-cjk-sans
-    noto-fonts-emoji
-    liberation_ttf
-    fira-code
-    fira-code-symbols
-  ];
+  fonts = {
+    packages = with pkgs; [
+      noto-fonts
+      noto-fonts-cjk-sans
+      noto-fonts-emoji
+      liberation_ttf
+      fira-code
+      fira-code-symbols
+      # Дополнительные шрифты для лучшей поддержки Unicode
+      dejavu_fonts
+      font-awesome
+      source-code-pro
+      # Монопространственные шрифты для терминала
+      jetbrains-mono
+      cascadia-code
+    ];
+    
+    # Настройки fontconfig для правильного отображения
+    fontconfig = {
+      enable = true;
+      defaultFonts = {
+        serif = [ "Noto Serif" "DejaVu Serif" ];
+        sansSerif = [ "Noto Sans" "DejaVu Sans" ];
+        monospace = [ "JetBrains Mono" "Fira Code" "DejaVu Sans Mono" ];
+        emoji = [ "Noto Color Emoji" ];
+      };
+    };
+  };
 
   # Enable automatic login for the user.
   services.getty.autologinUser = "lav";

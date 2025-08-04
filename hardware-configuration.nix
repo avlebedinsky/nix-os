@@ -32,7 +32,7 @@
   # VirtualBox specific optimizations
   # Enable VirtualBox Guest Additions
   virtualisation.virtualbox.guest.enable = true;
-  virtualisation.virtualbox.guest.x11 = true;
+  # Note: x11 option is deprecated in NixOS 25.05+
 
   # Networking for VirtualBox
   networking.useDHCP = lib.mkDefault true;
