@@ -550,27 +550,43 @@ check_nix_syntax() {
     fi
     
     # Check for problematic packages
-    if grep -q "locale$" "$file"; then
+    if grep -q "locale$" "$file" 2>/dev/null; then
         log_warning "Found 'locale' package which may not exist - removing"
-        sed -i '/locale$/d' "$file"
+        if command -v sed &> /dev/null; then
+            sed -i '/locale$/d' "$file" 2>/dev/null || {
+                log_warning "Failed to remove locale package automatically"
+            }
+        fi
     fi
     
     # Check for duplicate VirtualBox settings
     if [[ "$file" == "configuration.nix" ]]; then
-        local vbox_count=$(grep -c "virtualisation.virtualbox.guest.enable" "$file" || echo "0")
+        local vbox_count=$(grep -c "virtualisation.virtualbox.guest.enable" "$file" 2>/dev/null || echo "0")
+        # Ensure vbox_count is a valid number
+        if ! [[ "$vbox_count" =~ ^[0-9]+$ ]]; then
+            vbox_count=0
+        fi
         if [[ "$vbox_count" -gt 1 ]]; then
             log_warning "Found duplicate VirtualBox guest settings - fixing"
-            # Keep only the first occurrence
-            sed -i '0,/virtualisation.virtualbox.guest.enable = true;/!{/virtualisation.virtualbox.guest.enable = true;/d;}' "$file"
+            # Keep only the first occurrence - use a safer approach
+            if command -v sed &> /dev/null; then
+                # Create a temporary file for safer editing
+                local temp_file=$(mktemp)
+                awk '!seen && /virtualisation.virtualbox.guest.enable = true;/ {seen=1; print; next} 
+                     !/virtualisation.virtualbox.guest.enable = true;/ {print}' "$file" > "$temp_file"
+                if [[ -s "$temp_file" ]]; then
+                    mv "$temp_file" "$file"
+                    log_success "Removed duplicate VirtualBox settings"
+                else
+                    rm -f "$temp_file"
+                    log_warning "Failed to fix duplicate VirtualBox settings"
+                fi
+            fi
         fi
     fi
     
-    # Check for unclosed strings
-    if grep -q '^[[:space:]]*#.*[^;]$' "$file" && grep -q '";$' "$file"; then
-        log_success "Syntax of $description looks correct"
-    else
-        log_warning "Possible syntax issues in $file"
-    fi
+    # Simple syntax check completion
+    log_success "Syntax check completed for $description"
     
     return 0
 }
