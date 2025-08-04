@@ -79,6 +79,13 @@ if [[ -f "$CONFIG_FILE" ]]; then
         echo -e "${GREEN}✓ thunar корректно указан${NC}"
     fi
     
+    if grep -q "noto-fonts-cjk[^-]" "$CONFIG_FILE"; then
+        echo -e "${YELLOW}⚠ Найден пакет noto-fonts-cjk (должен быть noto-fonts-cjk-sans)${NC}"
+        echo "  Строка: $(grep -n "noto-fonts-cjk[^-]" "$CONFIG_FILE")"
+    else
+        echo -e "${GREEN}✓ noto-fonts-cjk корректно указан${NC}"
+    fi
+    
 else
     echo -e "${RED}✗ Файл конфигурации не найден: $CONFIG_FILE${NC}"
 fi
