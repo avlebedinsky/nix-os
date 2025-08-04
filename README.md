@@ -34,9 +34,21 @@
 
 ### Быстрая установка (рекомендуется):
 ```bash
-# Запустите автоматический скрипт установки
+# Полностью автоматическая установка - скрипт сделает ВСЁ сам!
 sudo ./install-configs.sh
 ```
+
+**Что делает автоматический скрипт:**
+- ✅ Определяет VirtualBox автоматически
+- ✅ Создает бэкапы существующих конфигураций
+- ✅ Копирует системные конфигурации в `/etc/nixos/`
+- ✅ Применяет конфигурацию NixOS (`nixos-rebuild switch`)
+- ✅ Создает пользователя `lav` с паролем `lav`
+- ✅ Устанавливает пользовательские конфигурации Hyprland и Waybar
+- ✅ Создает все необходимые директории
+- ✅ Проверяет зависимости и совместимость
+
+**После запуска скрипта только перезагрузитесь!**
 
 ### Ручная установка:
 
@@ -62,11 +74,6 @@ sudo ./install-configs.sh
    ```bash
    mkdir -p ~/.config/hypr ~/.config/waybar
    cp hyprland.conf ~/.config/hypr/
-   cp waybar-config.json ~/.config/waybar/config
-   cp waybar-style.css ~/.config/waybar/style.css
-   ```
-   ```bash
-   mkdir -p ~/.config/waybar
    cp waybar-config.json ~/.config/waybar/config
    cp waybar-style.css ~/.config/waybar/style.css
    ```
@@ -131,7 +138,23 @@ sudo nixos-rebuild switch
 
 ## Troubleshooting
 
-1. **Проблемы с графикой:** Проверьте настройки `hardware.opengl` в конфигурации
+### Синтаксические ошибки
+Если при применении конфигурации возникают ошибки синтаксиса:
+
+```bash
+# Автоматическое исправление частых ошибок
+./fix-syntax.sh
+
+# Проверка конфигурации
+sudo nixos-rebuild dry-build
+
+# Полная диагностика
+./diagnose-config.sh
+```
+
+### Частые проблемы
+
+1. **Проблемы с графикой:** Проверьте настройки `hardware.graphics` в конфигурации
 2. **Не работает звук:** Убедитесь, что PipeWire запущен: `systemctl --user status pipewire`
 3. **Проблемы с клавиатурой:** Проверьте настройки раскладки в Hyprland и X11
 

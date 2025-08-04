@@ -45,3 +45,4 @@
   
   # No specific CPU microcode updates needed in VM
   # hardware.cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
+}
