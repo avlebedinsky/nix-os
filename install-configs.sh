@@ -156,56 +156,211 @@ fix_nixos_25_compatibility() {
     return 0
 }
 
+# Function to diagnose hardware generation issues
+diagnose_hardware_generation() {
+    log_info "=== HARDWARE GENERATION DIAGNOSTICS ==="
+    
+    # Check NixOS environment
+    if [[ -f /etc/NIXOS ]]; then
+        log_success "Running on NixOS"
+    else
+        log_error "Not running on NixOS - this may be the problem"
+        log_info "This script should be run on a NixOS system"
+        return 1
+    fi
+    
+    # Check nixos-generate-config availability
+    if command -v nixos-generate-config &> /dev/null; then
+        log_success "nixos-generate-config found: $(which nixos-generate-config)"
+        
+        # Test basic functionality
+        log_info "Testing nixos-generate-config --help..."
+        if nixos-generate-config --help &> /dev/null; then
+            log_success "nixos-generate-config responds to --help"
+        else
+            log_error "nixos-generate-config --help failed"
+        fi
+    else
+        log_error "nixos-generate-config not found"
+        log_info "Searching in common locations..."
+        find /run/current-system /nix -name "nixos-generate-config" 2>/dev/null | head -3
+    fi
+    
+    # Check system permissions
+    if [[ $EUID -eq 0 ]]; then
+        log_success "Running as root"
+    else
+        log_warning "Not running as root - some hardware detection may fail"
+    fi
+    
+    # Check /sys filesystem
+    if [[ -d /sys/class/dmi ]]; then
+        log_success "/sys/class/dmi exists"
+    else
+        log_warning "/sys/class/dmi missing - hardware detection may be limited"
+    fi
+    
+    # Check for hardware files
+    log_info "Hardware information files:"
+    [[ -f /proc/cpuinfo ]] && log_success "/proc/cpuinfo exists" || log_warning "/proc/cpuinfo missing"
+    [[ -f /proc/meminfo ]] && log_success "/proc/meminfo exists" || log_warning "/proc/meminfo missing"
+    [[ -d /sys/block ]] && log_success "/sys/block exists" || log_warning "/sys/block missing"
+    
+    # Check filesystem state
+    log_info "Current filesystem mounts:"
+    mount | grep -E "^/dev" | head -5
+    
+    # Check for virtualization
+    if command -v systemd-detect-virt &> /dev/null; then
+        local virt=$(systemd-detect-virt 2>/dev/null || echo "none")
+        log_info "Virtualization: $virt"
+    fi
+    
+    return 0
+}
+
 # Function to create fallback hardware configuration
 create_fallback_hardware_config() {
     local target_file="$1"
     log_warning "Creating fallback hardware configuration..."
     
-    # Detect if we're in VirtualBox
+    # Detect system information
     local is_virtualbox=false
+    local is_vmware=false
+    local is_qemu=false
+    
+    # Enhanced virtualization detection
     if command -v systemd-detect-virt &> /dev/null; then
         local virt_type=$(systemd-detect-virt 2>/dev/null || echo "none")
-        if [[ "$virt_type" == "oracle" ]]; then
-            is_virtualbox=true
-            log_info "VirtualBox detected, using VirtualBox-optimized config"
+        case "$virt_type" in
+            "oracle")
+                is_virtualbox=true
+                log_info "VirtualBox detected"
+                ;;
+            "vmware")
+                is_vmware=true
+                log_info "VMware detected"
+                ;;
+            "qemu"|"kvm")
+                is_qemu=true
+                log_info "QEMU/KVM detected"
+                ;;
+            *)
+                log_info "Virtualization type: $virt_type"
+                ;;
+        esac
+    fi
+    
+    # Additional detection methods
+    if [[ -f /proc/cpuinfo ]]; then
+        if grep -q "hypervisor" /proc/cpuinfo; then
+            log_info "Hypervisor detected in /proc/cpuinfo"
         fi
+    fi
+    
+    # Check for VirtualBox guest additions
+    if command -v VBoxService &> /dev/null || [[ -d /opt/VBoxGuestAdditions* ]]; then
+        is_virtualbox=true
+        log_info "VirtualBox Guest Additions detected"
     fi
     
     # Use existing hardware-configuration.nix as template if available
     if [[ -f "hardware-configuration.nix" ]]; then
-        log_info "Using repository hardware-configuration.nix as fallback"
+        log_info "Using repository hardware-configuration.nix as fallback template"
         cp "hardware-configuration.nix" "$target_file"
         chmod 644 "$target_file"
+        log_success "Fallback configuration copied from repository"
         return 0
     fi
     
-    # Create basic hardware configuration
+    # Analyze current system to create better fallback
+    log_info "Analyzing current system for fallback configuration..."
+    
+    # Detect available kernel modules
+    local kernel_modules=""
+    if [[ -f /proc/modules ]]; then
+        if grep -q "ata_piix" /proc/modules; then
+            kernel_modules+="\"ata_piix\" "
+        fi
+        if grep -q "ahci" /proc/modules; then
+            kernel_modules+="\"ahci\" "
+        fi
+        if grep -q "xhci_pci" /proc/modules; then
+            kernel_modules+="\"xhci_pci\" "
+        fi
+        if grep -q "ehci_pci" /proc/modules; then
+            kernel_modules+="\"ehci_pci\" "
+        fi
+        if grep -q "ohci_pci" /proc/modules; then
+            kernel_modules+="\"ohci_pci\" "
+        fi
+        kernel_modules+="\"usb_storage\" \"sd_mod\" \"sr_mod\""
+    else
+        # Default fallback modules
+        if [[ "$is_virtualbox" == "true" ]]; then
+            kernel_modules="\"ata_piix\" \"ohci_pci\" \"ehci_pci\" \"ahci\" \"sd_mod\" \"sr_mod\""
+        else
+            kernel_modules="\"xhci_pci\" \"ehci_pci\" \"ahci\" \"usb_storage\" \"sd_mod\" \"sr_mod\""
+        fi
+    fi
+    
+    # Try to detect actual filesystem layout
+    local root_device=""
+    local boot_device=""
+    local root_fstype="ext4"
+    local boot_fstype="vfat"
+    
+    # Analyze current mounts
+    if command -v findmnt &> /dev/null; then
+        root_device=$(findmnt -n -o SOURCE / 2>/dev/null || echo "/dev/disk/by-label/nixos")
+        boot_device=$(findmnt -n -o SOURCE /boot 2>/dev/null || echo "/dev/disk/by-label/boot")
+        root_fstype=$(findmnt -n -o FSTYPE / 2>/dev/null || echo "ext4")
+        boot_fstype=$(findmnt -n -o FSTYPE /boot 2>/dev/null || echo "vfat")
+    else
+        # Fallback to mount parsing
+        local mount_info=$(mount | grep "on / " | head -1)
+        if [[ -n "$mount_info" ]]; then
+            root_device=$(echo "$mount_info" | awk '{print $1}')
+            root_fstype=$(echo "$mount_info" | sed 's/.*type \([^ ]*\).*/\1/')
+        fi
+        
+        mount_info=$(mount | grep "on /boot " | head -1)
+        if [[ -n "$mount_info" ]]; then
+            boot_device=$(echo "$mount_info" | awk '{print $1}')
+            boot_fstype=$(echo "$mount_info" | sed 's/.*type \([^ ]*\).*/\1/')
+        fi
+    fi
+    
+    log_info "Detected root device: $root_device ($root_fstype)"
+    log_info "Detected boot device: $boot_device ($boot_fstype)"
+    
+    # Create configuration based on detected environment
     local hw_config=""
     if [[ "$is_virtualbox" == "true" ]]; then
-        # VirtualBox configuration
-        hw_config='# Hardware configuration for VirtualBox (auto-generated fallback)
+        hw_config="# Hardware configuration for VirtualBox (auto-generated fallback)
+# Generated on $(date)
 { config, lib, pkgs, modulesPath, ... }:
 
 {
-  imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
+  imports = [ (modulesPath + \"/installer/scan/not-detected.nix\") ];
 
-  # Boot configuration for VirtualBox
-  boot.initrd.availableKernelModules = [ "ata_piix" "ohci_pci" "ehci_pci" "ahci" "sd_mod" "sr_mod" ];
+  # Boot configuration optimized for VirtualBox
+  boot.initrd.availableKernelModules = [ $kernel_modules ];
   boot.initrd.kernelModules = [ ];
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 
-  # File systems - adapt these to your actual setup
-  fileSystems."/" = {
-    device = "/dev/disk/by-label/nixos";
-    fsType = "ext4";
-    options = [ "defaults" ];
+  # File systems (detected from current system)
+  fileSystems.\"/\" = {
+    device = \"$root_device\";
+    fsType = \"$root_fstype\";
+    options = [ \"defaults\" ];
   };
 
-  fileSystems."/boot" = {
-    device = "/dev/disk/by-label/boot";
-    fsType = "vfat";
-    options = [ "defaults" ];
+  fileSystems.\"/boot\" = {
+    device = \"$boot_device\";
+    fsType = \"$boot_fstype\";
+    options = [ \"defaults\" ];
   };
 
   swapDevices = [ ];
@@ -215,52 +370,54 @@ create_fallback_hardware_config() {
   virtualisation.virtualbox.guest.dragAndDrop = true;
 
   networking.useDHCP = lib.mkDefault true;
-  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
-  powerManagement.cpuFreqGovernor = lib.mkDefault "performance";
-}'
+  nixpkgs.hostPlatform = lib.mkDefault \"x86_64-linux\";
+  powerManagement.cpuFreqGovernor = lib.mkDefault \"performance\";
+}"
     else
-        # Generic configuration
-        hw_config='# Hardware configuration (auto-generated fallback)
+        hw_config="# Hardware configuration (auto-generated fallback)
+# Generated on $(date)
+# IMPORTANT: Review and adjust this configuration for your hardware
 { config, lib, pkgs, modulesPath, ... }:
 
 {
-  imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
+  imports = [ (modulesPath + \"/installer/scan/not-detected.nix\") ];
 
   # Generic boot configuration
-  boot.initrd.availableKernelModules = [ "xhci_pci" "ehci_pci" "ahci" "usb_storage" "sd_mod" "sr_mod" ];
+  boot.initrd.availableKernelModules = [ $kernel_modules ];
   boot.initrd.kernelModules = [ ];
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 
-  # File systems - IMPORTANT: Adapt these to your actual setup
-  fileSystems."/" = {
-    device = "/dev/disk/by-label/nixos";
-    fsType = "ext4";
-    options = [ "defaults" ];
+  # File systems (detected from current system)
+  # REVIEW: Verify these paths match your actual setup
+  fileSystems.\"/\" = {
+    device = \"$root_device\";
+    fsType = \"$root_fstype\";
+    options = [ \"defaults\" ];
   };
 
-  fileSystems."/boot" = {
-    device = "/dev/disk/by-label/boot";
-    fsType = "vfat";
-    options = [ "defaults" ];
+  fileSystems.\"/boot\" = {
+    device = \"$boot_device\";
+    fsType = \"$boot_fstype\";
+    options = [ \"defaults\" ];
   };
 
   swapDevices = [ ];
 
   networking.useDHCP = lib.mkDefault true;
-  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
-  powerManagement.cpuFreqGovernor = lib.mkDefault "ondemand";
-}'
+  nixpkgs.hostPlatform = lib.mkDefault \"x86_64-linux\";
+  powerManagement.cpuFreqGovernor = lib.mkDefault \"ondemand\";
+}"
     fi
     
     # Write the configuration
     echo "$hw_config" > "$target_file"
     chmod 644 "$target_file"
     
-    log_warning "Fallback hardware configuration created"
-    log_warning "IMPORTANT: Review and adjust file system paths in $target_file"
+    log_success "Intelligent fallback hardware configuration created"
     if [[ "$is_virtualbox" != "true" ]]; then
-        log_warning "Generic config created - may need manual adjustment"
+        log_warning "IMPORTANT: Review device paths in $target_file"
+        log_warning "Run 'lsblk' to verify filesystem layout"
     fi
     
     return 0
@@ -277,78 +434,88 @@ generate_hardware_config() {
         return 1
     fi
     
-    # Generate hardware configuration using nixos-generate-config
-    if command -v nixos-generate-config &> /dev/null; then
-        log_info "Running nixos-generate-config to detect hardware..."
-        
-        # Create target directory if it doesn't exist
-        mkdir -p "$(dirname "$target_file")"
-        
-        # Try to generate config directly to target location first
-        log_info "Attempting direct generation to $target_file..."
-        if nixos-generate-config --root / --dir "$(dirname "$target_file")" 2>&1; then
-            if [[ -f "$target_file" ]]; then
-                # Set appropriate permissions
-                chmod 644 "$target_file"
-                log_success "Hardware configuration generated successfully"
-                log_info "Generated file: $target_file"
-                return 0
-            fi
-        fi
-        
-        log_warning "Direct generation failed, trying with temporary directory..."
-        
-        # Fallback: Create temporary directory for generation
-        local temp_dir=$(mktemp -d)
-        
-        # Generate config in temporary directory with verbose output
-        log_info "Using temporary directory: $temp_dir"
-        if nixos-generate-config --root / --dir "$temp_dir" 2>&1; then
-            if [[ -f "$temp_dir/hardware-configuration.nix" ]]; then
-                # Copy generated config to target location
-                cp "$temp_dir/hardware-configuration.nix" "$target_file"
-                
-                # Set appropriate permissions
-                chmod 644 "$target_file"
-                
-                log_success "Hardware configuration generated successfully"
-                log_info "Generated file: $target_file"
-                
-                # Clean up
-                rm -rf "$temp_dir"
-                return 0
-            else
-                log_error "No hardware-configuration.nix found in $temp_dir"
-                log_info "Contents of temp directory:"
-                ls -la "$temp_dir" 2>/dev/null || true
-                rm -rf "$temp_dir"
-            fi
-        else
-            log_error "nixos-generate-config command failed"
-            log_info "Trying alternative approach..."
-            rm -rf "$temp_dir"
-            
-            # Try with current working directory
-            if nixos-generate-config --show-hardware-config > "$target_file" 2>&1; then
-                if [[ -s "$target_file" ]]; then
-                    chmod 644 "$target_file"
-                    log_success "Hardware configuration generated using --show-hardware-config"
-                    return 0
-                else
-                    log_error "Generated file is empty"
-                    rm -f "$target_file"
-                fi
-            fi
-        fi
-        
-        log_error "All generation methods failed"
-        return 1
-    else
-        log_error "nixos-generate-config not found"
-        log_info "Make sure you're running this on a NixOS system"
-        log_info "You can try installing with: nix-env -iA nixos.nixos-generate-config"
+    # Check if nixos-generate-config exists and is executable
+    if ! command -v nixos-generate-config &> /dev/null; then
+        log_error "nixos-generate-config not found in PATH"
+        log_info "Current PATH: $PATH"
+        log_info "Searching for nixos-generate-config..."
+        find /nix /usr /bin -name "nixos-generate-config" 2>/dev/null | head -5
         return 1
     fi
+    
+    log_info "Found nixos-generate-config: $(which nixos-generate-config)"
+    
+    # Create target directory if it doesn't exist
+    mkdir -p "$(dirname "$target_file")"
+    
+    # Method 1: Try --show-hardware-config first (most reliable)
+    log_info "Method 1: Trying --show-hardware-config..."
+    local hw_output=$(nixos-generate-config --show-hardware-config 2>&1)
+    local exit_code=$?
+    
+    if [[ $exit_code -eq 0 && -n "$hw_output" ]]; then
+        echo "$hw_output" > "$target_file"
+        if [[ -s "$target_file" ]]; then
+            chmod 644 "$target_file"
+            log_success "Hardware configuration generated using --show-hardware-config"
+            return 0
+        else
+            log_warning "Generated file is empty"
+            rm -f "$target_file"
+        fi
+    else
+        log_warning "Method 1 failed with exit code: $exit_code"
+        log_info "Error output: $hw_output"
+    fi
+    
+    # Method 2: Try direct generation to target location
+    log_info "Method 2: Attempting direct generation to $(dirname "$target_file")..."
+    local gen_output=$(nixos-generate-config --root / --dir "$(dirname "$target_file")" 2>&1)
+    exit_code=$?
+    
+    if [[ $exit_code -eq 0 && -f "$target_file" ]]; then
+        chmod 644 "$target_file"
+        log_success "Hardware configuration generated directly"
+        return 0
+    else
+        log_warning "Method 2 failed with exit code: $exit_code"
+        log_info "Error output: $gen_output"
+    fi
+    
+    # Method 3: Use temporary directory
+    log_info "Method 3: Trying with temporary directory..."
+    local temp_dir=$(mktemp -d)
+    
+    gen_output=$(nixos-generate-config --root / --dir "$temp_dir" 2>&1)
+    exit_code=$?
+    
+    if [[ $exit_code -eq 0 && -f "$temp_dir/hardware-configuration.nix" ]]; then
+        cp "$temp_dir/hardware-configuration.nix" "$target_file"
+        chmod 644 "$target_file"
+        log_success "Hardware configuration generated via temporary directory"
+        rm -rf "$temp_dir"
+        return 0
+    else
+        log_warning "Method 3 failed with exit code: $exit_code"
+        log_info "Error output: $gen_output"
+        if [[ -d "$temp_dir" ]]; then
+            log_info "Temp directory contents: $(ls -la "$temp_dir" 2>/dev/null || echo 'empty')"
+            rm -rf "$temp_dir"
+        fi
+    fi
+    
+    # Method 4: Check system state
+    log_info "Method 4: Checking system state for manual generation..."
+    log_info "Kernel version: $(uname -r)"
+    log_info "Available block devices:"
+    lsblk 2>/dev/null || log_warning "lsblk not available"
+    
+    log_info "Mount points:"
+    mount | grep -E "^/dev" || log_warning "No mounted devices found"
+    
+    log_error "All automatic generation methods failed"
+    log_info "Will attempt fallback configuration creation..."
+    return 1
 }
 
 # Function to check Nix files syntax
@@ -467,12 +634,16 @@ install_system_configs() {
             hardware_handled=true
             log_success "Hardware configuration auto-generated"
         else
-            log_warning "Auto-generation failed, attempting fallback..."
+            log_warning "Auto-generation failed, running diagnostics..."
+            diagnose_hardware_generation
+            
+            log_warning "Attempting fallback configuration creation..."
             if create_fallback_hardware_config "/etc/nixos/hardware-configuration.nix"; then
                 hardware_handled=true
                 log_success "Fallback hardware configuration created"
             else
                 log_error "Failed to create hardware configuration"
+                log_info "Try running: sudo nixos-generate-config manually"
                 return 1
             fi
         fi
