@@ -28,9 +28,17 @@
 ## Установка
 
 **⚠️ ВАЖНО: Проверьте совместимость версий!**
-Эта конфигурация предназначена для NixOS 24.05+. Для более старых версий см. `VERSION-COMPATIBILITY.md`.
+Эта конфигурация предназначена для NixOS 24.05+. Для более старых версий см. `VIRTUALBOX.md`.
 
 Проверить версию: `nixos-version`
+
+### Быстрая установка (рекомендуется):
+```bash
+# Запустите автоматический скрипт установки
+sudo ./install-configs.sh
+```
+
+### Ручная установка:
 
 1. **Создайте hardware-configuration.nix для вашей системы:**
    ```bash
@@ -44,20 +52,19 @@
    sudo cp hardware-configuration.nix /etc/nixos/
    ```
 
-3. **Создайте пользователя и установите пароль:**
-   Измените имя пользователя в `configuration.nix` и выполните:
+3. **Примените конфигурацию:**
    ```bash
    sudo nixos-rebuild switch
-   sudo passwd ваше_имя_пользователя
    ```
+   Пользователь `lav` с паролем `lav` будет создан автоматически.
 
-4. **Скопируйте конфигурацию Hyprland:**
+4. **Скопируйте пользовательские конфигурации:**
    ```bash
-   mkdir -p ~/.config/hypr
+   mkdir -p ~/.config/hypr ~/.config/waybar
    cp hyprland.conf ~/.config/hypr/
+   cp waybar-config.json ~/.config/waybar/config
+   cp waybar-style.css ~/.config/waybar/style.css
    ```
-
-5. **Настройте Waybar:**
    ```bash
    mkdir -p ~/.config/waybar
    cp waybar-config.json ~/.config/waybar/config
@@ -66,17 +73,18 @@
 
 ## Основные горячие клавиши
 
-- `Super + T` - Открыть терминал (Kitty)
+- `Super + Enter` - Открыть терминал (Kitty)
 - `Super + R` - Запустить приложение (Rofi)
 - `Super + Q` - Закрыть окно
 - `Super + M` - Выйти из Hyprland
-- `Super + F` - Полноэкранный режим
 - `Super + V` - Переключить плавающий режим
 - `Super + E` - Файловый менеджер (Thunar)
 - `Super + 1-9` - Переключиться на рабочий стол
 - `Super + Shift + 1-9` - Переместить окно на рабочий стол
-- `Print` - Скриншот области
 - `Super + Print` - Скриншот всего экрана
+- `Super + Shift + S` - Скриншот области
+- `Super + стрелки` - Перемещение фокуса между окнами
+- `Super + Shift + стрелки` - Перемещение окон
 
 ## Дополнительные настройки
 
@@ -88,14 +96,25 @@ feh --bg-scale /path/to/wallpaper.jpg
 ```
 
 ### Автоматический вход
-По умолчанию включен автоматический вход для пользователя. Отключите в `configuration.nix` если не нужно:
+По умолчанию включен автоматический вход для пользователя `lav`. Отключите в `configuration.nix` если не нужно:
 ```nix
 # Закомментируйте эту строку:
-# services.getty.autologinUser = "user";
+# services.getty.autologinUser = "lav";
+```
+
+### Смена пароля
+После первого входа смените пароль:
+```bash
+passwd
 ```
 
 ### Дополнительные пакеты
 Добавьте нужные пакеты в список `environment.systemPackages` в `configuration.nix`.
+
+## VirtualBox
+Для работы в VirtualBox смотрите `VIRTUALBOX.md` - там описаны специальные оптимизации и настройки.
+
+Скрипт установки автоматически определяет VirtualBox и применяет оптимизированные конфигурации.
 
 ## Обновление системы
 

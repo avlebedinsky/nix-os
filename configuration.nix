@@ -72,25 +72,35 @@
     xwayland.enable = true;
   };
 
-  # Environment variables for Hyprland
+  # Environment variables for Hyprland (VirtualBox optimized)
   environment.sessionVariables = {
     WLR_NO_HARDWARE_CURSORS = "1";
     NIXOS_OZONE_WL = "1";
+    # VirtualBox specific optimizations
+    WLR_RENDERER_ALLOW_SOFTWARE = "1";
+    MESA_D3D12_DEFAULT_ADAPTER_NAME = "NONE";
   };
 
-  # Enable hardware acceleration
+  # Enable hardware acceleration (VirtualBox compatible)
   # Updated for NixOS 24.05+ (hardware.opengl -> hardware.graphics)
   hardware.graphics = {
     enable = true;
     enable32Bit = true;
+    # VirtualBox doesn't support many modern graphics features
+    extraPackages = with pkgs; [
+      mesa.drivers
+    ];
   };
 
+  # VirtualBox specific services
+  services.spice-vdagentd.enable = true;
+
   # Define a user account. Don't forget to set a password with 'passwd'.
-  users.users.avleb = {
+  users.users.lav = {
     isNormalUser = true;
-    description = "Avleb";
-    extraGroups = [ "networkmanager" "wheel" "video" "audio" ];
-    password = "123456";  # Временный пароль, смените после первого входа
+    description = "Lav";
+    extraGroups = [ "networkmanager" "wheel" ];
+    password = "lav";
     packages = with pkgs; [
       firefox
       tree
@@ -147,6 +157,9 @@
     
     # Development tools (optional)
     vscode
+    
+    # VirtualBox specific tools
+    virtualbox-guest-additions-iso
   ];
 
   # Fonts configuration
@@ -160,14 +173,7 @@
   ];
 
   # Enable automatic login for the user.
-  services.getty.autologinUser = "avleb";
-  
-  # Auto start Hyprland on TTY1 login
-  environment.loginShellInit = ''
-    if [ -z $DISPLAY ] && [ "$(tty)" = "/dev/tty1" ]; then
-      exec Hyprland
-    fi
-  '';
+  services.getty.autologinUser = "lav";
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
