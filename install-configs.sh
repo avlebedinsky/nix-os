@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
 # -*- coding: utf-8 -*-
-# Автоматический скрипт установки конфигураций NixOS и Hyprland
-# Исправлена кодировка для правильного отображения русских символов
+# Automatic installation script for NixOS and Hyprland configurations
+# Fixed encoding for proper display of Russian characters
 
-# Принудительная установка UTF-8
+# Force UTF-8 setup
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
-# Цвета для вывода
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Функции для логгирования
+# Logging functions
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Проверка root прав для системных операций
+# Check root privileges for system operations
 check_root() {
     if [[ $EUID -ne 0 ]]; then
-        log_error "Этот скрипт должен запускаться с sudo для системных конфигураций"
-        log_info "Перезапуск с sudo..."
+        log_error "This script must be run with sudo for system configurations"
+        log_info "Restarting with sudo..."
         exec sudo "$0" "$@"
     fi
 }
 
-# Получение имени пользователя, который вызвал sudo
+# Get the username who called sudo
 get_real_user() {
     if [[ -n "$SUDO_USER" ]]; then
         echo "$SUDO_USER"
@@ -38,42 +38,42 @@ get_real_user() {
     fi
 }
 
-# Получение домашней директории пользователя
+# Get user's home directory
 get_user_home() {
     local user="$1"
     eval echo "~$user"
 }
 
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║          Автоматическая установка NixOS + Hyprland          ║${NC}"
+echo -e "${GREEN}║            Automatic NixOS + Hyprland Installation          ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo
 
-# Проверка root прав
+# Check root privileges
 check_root "$@"
 
-# Определение пользователя
+# Determine user
 REAL_USER=$(get_real_user)
 USER_HOME=$(get_user_home "$REAL_USER")
 
-log_info "Пользователь: $REAL_USER"
-log_info "Домашняя директория: $USER_HOME"
+log_info "User: $REAL_USER"
+log_info "Home directory: $USER_HOME"
 
-# Проверка прав на выполнение
+# Check execution permissions
 if [[ ! -x "$0" ]]; then
-    log_warning "Настройка прав на выполнение..."
+    log_warning "Setting execution permissions..."
     chmod +x "$0"
 fi
 
-# Проверка, что скрипт запущен из правильной директории
+# Check that script is run from the correct directory
 if [[ ! -f "configuration.nix" || ! -f "hyprland.conf" ]]; then
-    log_error "Запустите скрипт из директории с конфигурациями"
-    log_info "Текущая директория: $(pwd)"
-    log_info "Ожидаемые файлы: configuration.nix, hyprland.conf"
+    log_error "Run script from directory with configurations"
+    log_info "Current directory: $(pwd)"
+    log_info "Expected files: configuration.nix, hyprland.conf"
     exit 1
 fi
 
-# Функция проверки и исправления для NixOS 25.05+
+# Function to check and fix compatibility for NixOS 25.05+
 fix_nixos_25_compatibility() {
     local config_file="$1"
     
@@ -81,20 +81,20 @@ fix_nixos_25_compatibility() {
         return 0
     fi
     
-    log_info "Проверка совместимости с NixOS 25.05+..."
+    log_info "Checking NixOS 25.05+ compatibility..."
     
-    # Проверка версии NixOS
+    # Check NixOS version
     if command -v nixos-version &> /dev/null; then
         local version=$(nixos-version | grep -o '[0-9][0-9]\.[0-9][0-9]' | head -1)
         local major=$(echo $version | cut -d. -f1)
         local minor=$(echo $version | cut -d. -f2)
         
         if [[ $major -gt 24 ]] || [[ $major -eq 25 && $minor -ge 5 ]]; then
-            log_info "Обнаружена NixOS 25.05+, применение исправлений..."
+            log_info "Detected NixOS 25.05+, applying fixes..."
             
-            # Удаление устаревшей опции virtualbox x11
+            # Remove deprecated virtualbox x11 option
             if grep -q "virtualisation.virtualbox.guest.x11" "$config_file"; then
-                log_warning "Удаление устаревшей опции virtualisation.virtualbox.guest.x11"
+                log_warning "Removing deprecated option virtualisation.virtualbox.guest.x11"
                 sed -i '/virtualisation.virtualbox.guest.x11/d' "$config_file"
             fi
         fi
@@ -103,71 +103,71 @@ fix_nixos_25_compatibility() {
     return 0
 }
 
-# Функция для проверки синтаксиса Nix файлов
+# Function to check Nix files syntax
 check_nix_syntax() {
     local file="$1"
     local description="$2"
     
     if [[ ! -f "$file" ]]; then
-        log_error "$description не найден: $file"
+        log_error "$description not found: $file"
         return 1
     fi
     
-    log_info "Проверка синтаксиса: $description"
+    log_info "Checking syntax: $description"
     
-    # Базовая проверка на корректность скобок
+    # Basic check for correct braces
     local open_braces=$(grep -o '{' "$file" | wc -l)
     local close_braces=$(grep -o '}' "$file" | wc -l)
     
     if [[ "$open_braces" -ne "$close_braces" ]]; then
-        log_error "Несоответствие скобок в $file: открывающих=$open_braces, закрывающих=$close_braces"
+        log_error "Brace mismatch in $file: opening=$open_braces, closing=$close_braces"
         return 1
     fi
     
-    # Проверка на незакрытые строки
+    # Check for unclosed strings
     if grep -q '^[[:space:]]*#.*[^;]$' "$file" && grep -q '";$' "$file"; then
-        log_success "Синтаксис $description выглядит корректно"
+        log_success "Syntax of $description looks correct"
     else
-        log_warning "Возможны проблемы с синтаксисом в $file"
+        log_warning "Possible syntax issues in $file"
     fi
     
     return 0
 }
 
-# Функция для создания бэкапа
+# Function to create backup
 backup_file() {
     local file="$1"
     if [[ -f "$file" ]]; then
         local backup_name="$file.backup$(date +%Y%m%d-%H%M%S)"
-        log_warning "Создание бэкапа: $backup_name"
+        log_warning "Creating backup: $backup_name"
         cp "$file" "$backup_name"
         return 0
     fi
     return 1
 }
 
-# Функция для безопасного копирования с sudo
+# Function for safe copying with sudo
 safe_copy() {
     local src="$1"
     local dest="$2"
     local owner="$3"
     
     if [[ ! -f "$src" ]]; then
-        log_error "Файл не найден: $src"
+        log_error "File not found: $src"
         return 1
     fi
     
-    # Создание директории если не существует
+    # Create directory if it doesn't exist
     local dest_dir=$(dirname "$dest")
     if [[ ! -d "$dest_dir" ]]; then
-        log_info "Создание директории: $dest_dir"
+        log_info "Creating directory: $dest_dir"
         mkdir -p "$dest_dir"
     fi
     
-    log_info "Копирование: $src -> $dest"
+    log_info "Copying: $src -> $dest"
     cp "$src" "$dest"
     
-    # Установка владельца если указан
+    # Set owner if specified
     if [[ -n "$owner" ]]; then
         chown "$owner:$owner" "$dest"
     fi
@@ -175,11 +175,11 @@ safe_copy() {
     return 0
 }
 
-# Функция установки системных конфигураций
+# Function to install system configurations
 install_system_configs() {
-    log_info "=== УСТАНОВКА СИСТЕМНЫХ КОНФИГУРАЦИЙ ==="
+    log_info "=== INSTALLING SYSTEM CONFIGURATIONS ==="
     
-    # Проверка совместимости с NixOS 25.05+
+    # Check compatibility with NixOS 25.05+
     if [[ -f "configuration.nix" ]]; then
         fix_nixos_25_compatibility "configuration.nix"
     fi
@@ -188,57 +188,57 @@ install_system_configs() {
         fix_nixos_25_compatibility "hardware-configuration.nix"
     fi
     
-    # Проверка синтаксиса файлов перед установкой
+    # Check file syntax before installation
     if ! check_nix_syntax "configuration.nix" "configuration.nix"; then
-        log_error "Ошибка синтаксиса в configuration.nix"
+        log_error "Syntax error in configuration.nix"
         return 1
     fi
     
     if [[ -f "hardware-configuration.nix" ]]; then
         if ! check_nix_syntax "hardware-configuration.nix" "hardware-configuration.nix"; then
-            log_error "Ошибка синтаксиса в hardware-configuration.nix"
+            log_error "Syntax error in hardware-configuration.nix"
             return 1
         fi
     fi
     
-    # Создание бэкапов существующих конфигураций
+    # Create backups of existing configurations
     backup_file "/etc/nixos/configuration.nix"
     backup_file "/etc/nixos/hardware-configuration.nix"
     
-    # Копирование новых конфигураций
+    # Copy new configurations
     safe_copy "configuration.nix" "/etc/nixos/configuration.nix"
     
     if [[ -f "hardware-configuration.nix" ]]; then
         safe_copy "hardware-configuration.nix" "/etc/nixos/hardware-configuration.nix"
-        log_success "Системные конфигурации установлены"
+        log_success "System configurations installed"
     else
-        log_warning "hardware-configuration.nix не найден, используется существующий"
+        log_warning "hardware-configuration.nix not found, using existing one"
     fi
     
     return 0
 }
 
-# Функция установки пользовательских конфигураций
+# Function to install user configurations
 install_user_configs() {
-    log_info "=== УСТАНОВКА ПОЛЬЗОВАТЕЛЬСКИХ КОНФИГУРАЦИЙ ==="
+    log_info "=== INSTALLING USER CONFIGURATIONS ==="
     
-    # Проверка на VirtualBox
-    log_info "Определение среды выполнения..."
+    # Check for VirtualBox
+    log_info "Detecting runtime environment..."
     local VIRTUALBOX_DETECTED=false
     
     if command -v systemd-detect-virt &> /dev/null; then
         local virt_type=$(systemd-detect-virt 2>/dev/null || echo "none")
         if [[ "$virt_type" == "oracle" ]]; then
-            log_warning "Обнаружена VirtualBox среда - будут применены оптимизации"
+            log_warning "VirtualBox environment detected - optimizations will be applied"
             VIRTUALBOX_DETECTED=true
         else
-            log_info "Среда выполнения: $virt_type"
+            log_info "Runtime environment: $virt_type"
         fi
     else
-        log_warning "Невозможно определить среду виртуализации"
+        log_warning "Unable to detect virtualization environment"
     fi
     
-    # Создание пользовательских директорий
+    # Create user directories
     local config_dirs=(
         "$USER_HOME/.config/hypr"
         "$USER_HOME/.config/waybar"
@@ -250,24 +250,24 @@ install_user_configs() {
     
     for dir in "${config_dirs[@]}"; do
         if [[ ! -d "$dir" ]]; then
-            log_info "Создание директории: $dir"
+            log_info "Creating directory: $dir"
             sudo -u "$REAL_USER" mkdir -p "$dir"
         fi
     done
     
-    # Установка Hyprland конфигурации
+    # Install Hyprland configuration
     local hypr_config="$USER_HOME/.config/hypr/hyprland.conf"
     backup_file "$hypr_config"
     
     if [[ "$VIRTUALBOX_DETECTED" == "true" && -f "hyprland-virtualbox.conf" ]]; then
-        log_info "Установка VirtualBox-оптимизированной конфигурации Hyprland"
+        log_info "Installing VirtualBox-optimized Hyprland configuration"
         safe_copy "hyprland-virtualbox.conf" "$hypr_config" "$REAL_USER"
     else
-        log_info "Установка стандартной конфигурации Hyprland"
+        log_info "Installing standard Hyprland configuration"
         safe_copy "hyprland.conf" "$hypr_config" "$REAL_USER"
     fi
     
-    # Установка Waybar конфигурации
+    # Install Waybar configuration
     if [[ -f "waybar-config.json" && -f "waybar-style.css" ]]; then
         local waybar_config="$USER_HOME/.config/waybar/config"
         local waybar_style="$USER_HOME/.config/waybar/style.css"
@@ -277,154 +277,154 @@ install_user_configs() {
         
         safe_copy "waybar-config.json" "$waybar_config" "$REAL_USER"
         safe_copy "waybar-style.css" "$waybar_style" "$REAL_USER"
-        log_success "Waybar конфигурация установлена"
+        log_success "Waybar configuration installed"
     else
-        log_warning "Файлы Waybar не найдены, пропускаем"
+        log_warning "Waybar files not found, skipping"
     fi
     
-    # Установка Kitty конфигурации для правильного отображения символов
+    # Install Kitty configuration for proper character display
     if [[ -f "kitty.conf" ]]; then
         local kitty_config="$USER_HOME/.config/kitty/kitty.conf"
         backup_file "$kitty_config"
         safe_copy "kitty.conf" "$kitty_config" "$REAL_USER"
-        log_success "Kitty конфигурация установлена (исправлены проблемы с кодировкой)"
+        log_success "Kitty configuration installed (encoding issues fixed)"
     else
-        log_warning "kitty.conf не найден, терминал может отображать символы некорректно"
+        log_warning "kitty.conf not found, terminal may display characters incorrectly"
     fi
     
-    log_success "Пользовательские конфигурации установлены"
+    log_success "User configurations installed"
     return 0
 }
 
-# Функция применения конфигурации NixOS
+# Function to apply NixOS configuration
 apply_nixos_config() {
-    log_info "=== ПРИМЕНЕНИЕ КОНФИГУРАЦИИ NIXOS ==="
+    log_info "=== APPLYING NIXOS CONFIGURATION ==="
     
-    # Проверка синтаксиса конфигурации
-    log_info "Проверка синтаксиса конфигурации..."
+    # Check configuration syntax
+    log_info "Checking configuration syntax..."
     if ! nixos-rebuild dry-build &>/dev/null; then
-        log_error "Ошибка в конфигурации NixOS!"
-        log_info "Запуск диагностики..."
+        log_error "Error in NixOS configuration!"
+        log_info "Running diagnostics..."
         nixos-rebuild dry-build
         return 1
     fi
     
-    log_success "Синтаксис конфигурации корректный"
+    log_success "Configuration syntax is correct"
     
-    # Применение конфигурации
-    log_info "Применение конфигурации NixOS (это может занять несколько минут)..."
+    # Apply configuration
+    log_info "Applying NixOS configuration (this may take several minutes)..."
     if nixos-rebuild switch; then
-        log_success "Конфигурация NixOS успешно применена!"
+        log_success "NixOS configuration applied successfully!"
         return 0
     else
-        log_error "Ошибка при применении конфигурации NixOS!"
+        log_error "Error applying NixOS configuration!"
         return 1
     fi
 }
 
-# Функция проверки зависимостей
+# Function to check dependencies
 check_dependencies() {
-    log_info "=== ПРОВЕРКА ЗАВИСИМОСТЕЙ ==="
+    log_info "=== CHECKING DEPENDENCIES ==="
     
-    # Проверка версии NixOS
+    # Check NixOS version
     if command -v nixos-version &> /dev/null; then
         local current_version=$(nixos-version | grep -o '[0-9][0-9]\.[0-9][0-9]' | head -1)
-        log_info "Версия NixOS: $current_version"
+        log_info "NixOS version: $current_version"
         
         if [[ "$current_version" < "24.05" ]]; then
-            log_warning "Версия NixOS старше 24.05. Могут потребоваться изменения!"
+            log_warning "NixOS version is older than 24.05. Changes may be required!"
         else
-            log_success "Версия NixOS совместима"
+            log_success "NixOS version is compatible"
         fi
     else
-        log_warning "Невозможно определить версию NixOS"
+        log_warning "Unable to determine NixOS version"
     fi
     
-    # Проверка наличия cliphist (будет установлен с конфигурацией)
+    # Check for cliphist availability (will be installed with configuration)
     if ! command -v cliphist &> /dev/null; then
-        log_info "cliphist будет установлен с конфигурацией"
+        log_info "cliphist will be installed with configuration"
     else
-        log_success "cliphist уже установлен"
+        log_success "cliphist is already installed"
     fi
     
     return 0
 }
 
-# Функция финального отчета
+# Function for final report
 final_report() {
-    log_info "=== ОТЧЕТ ОБ УСТАНОВКЕ ==="
+    log_info "=== INSTALLATION REPORT ==="
     
-    echo -e "${GREEN}✓ Установленные конфигурации:${NC}"
+    echo -e "${GREEN}✓ Installed configurations:${NC}"
     
-    # Проверка системных файлов
+    # Check system files
     [[ -f "/etc/nixos/configuration.nix" ]] && echo "  ✓ /etc/nixos/configuration.nix"
     [[ -f "/etc/nixos/hardware-configuration.nix" ]] && echo "  ✓ /etc/nixos/hardware-configuration.nix"
     
-    # Проверка пользовательских файлов
+    # Check user files
     [[ -f "$USER_HOME/.config/hypr/hyprland.conf" ]] && echo "  ✓ $USER_HOME/.config/hypr/hyprland.conf"
     [[ -f "$USER_HOME/.config/waybar/config" ]] && echo "  ✓ $USER_HOME/.config/waybar/config"
     [[ -f "$USER_HOME/.config/waybar/style.css" ]] && echo "  ✓ $USER_HOME/.config/waybar/style.css"
     [[ -f "$USER_HOME/.config/kitty/kitty.conf" ]] && echo "  ✓ $USER_HOME/.config/kitty/kitty.conf"
     
     echo
-    echo -e "${YELLOW}📋 Следующие шаги:${NC}"
-    echo "1. ✅ Конфигурация NixOS применена автоматически"
-    echo "2. 🔑 Пользователь 'lav' создан с паролем 'lav'"
-    echo "3. 🔒 Смените пароль: sudo -u lav passwd"
-    echo "4. 🔄 Перезагрузитесь для полного применения изменений"
-    echo "5. 🚀 После перезагрузки войдите как пользователь 'lav'"
-    echo "6. 🎨 Hyprland запустится автоматически"
+    echo -e "${YELLOW}📋 Next steps:${NC}"
+    echo "1. ✅ NixOS configuration applied automatically"
+    echo "2. 🔑 User 'lav' created with password 'lav'"
+    echo "3. 🔒 Change password: sudo -u lav passwd"
+    echo "4. 🔄 Reboot for complete changes to take effect"
+    echo "5. 🚀 After reboot, log in as user 'lav'"
+    echo "6. 🎨 Hyprland will start automatically"
     
     echo
-    echo -e "${BLUE}🔧 Исправления кодировки:${NC}"
-    echo "- Установлены дополнительные шрифты для терминала"
-    echo "- Настроена конфигурация Kitty с UTF-8"
-    echo "- Добавлены переменные окружения для правильного отображения"
+    echo -e "${BLUE}🔧 Encoding fixes:${NC}"
+    echo "- Additional fonts installed for terminal"
+    echo "- Kitty configuration set up with UTF-8"
+    echo "- Environment variables added for proper display"
     
     echo
-    echo -e "${GREEN}Установка завершена успешно!${NC}"
+    echo -e "${GREEN}Installation completed successfully!${NC}"
 }
 
-# ГЛАВНАЯ ФУНКЦИЯ
+# MAIN FUNCTION
 main() {
-    log_info "Начало установки..."
+    log_info "Starting installation..."
     
-    # Этап 1: Проверка зависимостей
+    # Stage 1: Check dependencies
     if ! check_dependencies; then
-        log_error "Ошибка при проверке зависимостей"
+        log_error "Error checking dependencies"
         exit 1
     fi
     
     echo
     
-    # Этап 2: Установка системных конфигураций
+    # Stage 2: Install system configurations
     if ! install_system_configs; then
-        log_error "Ошибка при установке системных конфигураций"
+        log_error "Error installing system configurations"
         exit 1
     fi
     
     echo
     
-    # Этап 3: Установка пользовательских конфигураций
+    # Stage 3: Install user configurations
     if ! install_user_configs; then
-        log_error "Ошибка при установке пользовательских конфигураций"
+        log_error "Error installing user configurations"
         exit 1
     fi
     
     echo
     
-    # Этап 4: Применение конфигурации NixOS
+    # Stage 4: Apply NixOS configuration
     if ! apply_nixos_config; then
-        log_error "Ошибка при применении конфигурации NixOS"
-        log_info "Вы можете попробовать запустить 'sudo nixos-rebuild switch' вручную"
+        log_error "Error applying NixOS configuration"
+        log_info "You can try running 'sudo nixos-rebuild switch' manually"
         exit 1
     fi
     
     echo
     
-    # Этап 5: Финальный отчет
+    # Stage 5: Final report
     final_report
 }
 
-# Запуск главной функции
+# Run main function
 main "$@"
