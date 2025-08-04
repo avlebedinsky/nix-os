@@ -14,19 +14,19 @@
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 
-  # File systems configuration 
-  # IMPORTANT: These need to be updated with actual UUIDs from your system
-  # Run: sudo blkid to get the correct UUIDs
-  fileSystems."/" =
-    { device = "/dev/sda1";  # Using device path instead of UUID temporarily
-      fsType = "ext4";
-    };
+  # File systems configuration with fallback options
+  # Try multiple device detection methods
+  fileSystems."/" = {
+    device = "/dev/disk/by-label/nixos";
+    fsType = "ext4";
+    options = [ "defaults" ];
+  };
 
-  fileSystems."/boot" =
-    { device = "/dev/sda2";  # Using device path instead of UUID temporarily
-      fsType = "vfat";
-      options = [ "fmask=0022" "dmask=0022" ];
-    };
+  fileSystems."/boot" = {
+    device = "/dev/disk/by-label/boot";
+    fsType = "vfat";
+    options = [ "defaults" ];
+  };
 
   # Swap configuration - comment out if no swap
   # swapDevices = [ { device = "/dev/sda3"; } ];
