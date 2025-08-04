@@ -27,6 +27,11 @@
 
 ## Установка
 
+**⚠️ ВАЖНО: Проверьте совместимость версий!**
+Эта конфигурация предназначена для NixOS 24.05+. Для более старых версий см. `VERSION-COMPATIBILITY.md`.
+
+Проверить версию: `nixos-version`
+
 1. **Создайте hardware-configuration.nix для вашей системы:**
    ```bash
    sudo nixos-generate-config --root /mnt

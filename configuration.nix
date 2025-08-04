@@ -55,7 +55,7 @@
   services.printing.enable = true;
 
   # Enable sound with pipewire.
-  sound.enable = true;
+  # sound.enable is deprecated in NixOS 24.05+
   hardware.pulseaudio.enable = false;
   security.rtkit.enable = true;
   services.pipewire = {
@@ -79,10 +79,10 @@
   };
 
   # Enable hardware acceleration
-  hardware.opengl = {
+  # Updated for NixOS 24.05+ (hardware.opengl -> hardware.graphics)
+  hardware.graphics = {
     enable = true;
-    driSupport = true;
-    driSupport32Bit = true;
+    enable32Bit = true;
   };
 
   # Define a user account. Don't forget to set a password with 'passwd'.
