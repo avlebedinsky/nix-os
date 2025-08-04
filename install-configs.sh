@@ -52,6 +52,7 @@ echo
 # Parse command line arguments
 SKIP_HARDWARE_COPY=false
 AUTO_GENERATE_HARDWARE=false
+COPY_HARDWARE_FROM_REPO=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -63,27 +64,36 @@ while [[ $# -gt 0 ]]; do
             AUTO_GENERATE_HARDWARE=true
             shift
             ;;
+        --copy-hardware)
+            COPY_HARDWARE_FROM_REPO=true
+            shift
+            ;;
         --help|-h)
             echo "NixOS + Hyprland Configuration Installation Script"
             echo
             echo "Usage: $0 [OPTIONS]"
             echo
-            echo "Options:"
-            echo "  --skip-hardware     Skip copying hardware-configuration.nix from repository"
-            echo "                      Use existing /etc/nixos/hardware-configuration.nix"
+            echo "Hardware Configuration Options:"
+            echo "  --skip-hardware     Use existing /etc/nixos/hardware-configuration.nix"
+            echo "                      (default behavior - no changes to hardware config)"
             echo
             echo "  --auto-hardware     Auto-generate hardware-configuration.nix using"
             echo "                      nixos-generate-config (recommended for new systems)"
             echo
+            echo "  --copy-hardware     Copy hardware-configuration.nix from repository"
+            echo "                      (use when config was created for your specific hardware)"
+            echo
             echo "  --help, -h          Show this help message"
             echo
             echo "Examples:"
-            echo "  $0                        # Copy all configs from repository (default)"
-            echo "  $0 --auto-hardware       # Auto-generate hardware config"
-            echo "  $0 --skip-hardware       # Keep existing hardware config"
+            echo "  $0                        # Install only configuration.nix and user configs"
+            echo "  $0 --auto-hardware       # Auto-generate hardware config + install configs"
+            echo "  $0 --copy-hardware       # Copy hardware config from repo + install configs"
+            echo "  $0 --skip-hardware       # Same as default - explicitly use existing hardware config"
             echo
-            echo "Note: Auto-generation is recommended for VirtualBox or when setting up"
-            echo "      on different hardware than the repository was created for."
+            echo "Note: By default, hardware-configuration.nix is left unchanged."
+            echo "      Use --auto-hardware for VirtualBox or new hardware."
+            echo "      Use --copy-hardware only if repository config matches your hardware."
             exit 0
             ;;
         *)
@@ -117,13 +127,18 @@ if [[ ! -f "configuration.nix" || ! -f "hyprland.conf" ]]; then
     exit 1
 fi
 
-# Additional check for hardware configuration based on options
-if [[ "$AUTO_GENERATE_HARDWARE" != "true" && "$SKIP_HARDWARE_COPY" != "true" && ! -f "hardware-configuration.nix" ]]; then
-    log_warning "hardware-configuration.nix not found in repository"
-    log_info "Use --auto-hardware to generate automatically, or --skip-hardware to use existing"
-    log_info "Available options:"
+# Additional information about hardware configuration options
+if [[ "$AUTO_GENERATE_HARDWARE" != "true" && "$SKIP_HARDWARE_COPY" != "true" && "$COPY_HARDWARE_FROM_REPO" != "true" ]]; then
+    log_info "Hardware configuration will be left unchanged (default behavior)"
+    log_info "Available hardware options:"
     log_info "  $0 --auto-hardware    # Auto-generate hardware config"
-    log_info "  $0 --skip-hardware    # Use existing hardware config"
+    log_info "  $0 --copy-hardware    # Copy hardware config from repository"
+    log_info "  $0 --skip-hardware    # Explicitly use existing hardware config"
+elif [[ "$COPY_HARDWARE_FROM_REPO" == "true" && ! -f "hardware-configuration.nix" ]]; then
+    log_error "hardware-configuration.nix not found in repository"
+    log_info "Cannot use --copy-hardware without hardware-configuration.nix file"
+    log_info "Use --auto-hardware to generate automatically instead"
+    exit 1
 fi
 
 # Function to check and fix compatibility for NixOS 25.05+
@@ -663,26 +678,36 @@ install_system_configs() {
                 return 1
             fi
         fi
-    elif [[ "$SKIP_HARDWARE_COPY" == "true" ]]; then
-        log_info "Skipping hardware configuration copy as requested"
-        if [[ ! -f "/etc/nixos/hardware-configuration.nix" ]]; then
-            log_warning "No existing hardware-configuration.nix found"
-            log_info "Consider using --auto-hardware option or run 'nixos-generate-config' manually"
-        fi
-        hardware_handled=true
-    elif [[ -f "hardware-configuration.nix" ]]; then
-        # Traditional behavior - copy existing file
-        fix_nixos_25_compatibility "hardware-configuration.nix"
-        if ! check_nix_syntax "hardware-configuration.nix" "hardware-configuration.nix"; then
-            log_error "Syntax error in hardware-configuration.nix"
+    elif [[ "$COPY_HARDWARE_FROM_REPO" == "true" ]]; then
+        log_info "Copying hardware configuration from repository..."
+        if [[ -f "hardware-configuration.nix" ]]; then
+            # Check compatibility and syntax
+            fix_nixos_25_compatibility "hardware-configuration.nix"
+            if ! check_nix_syntax "hardware-configuration.nix" "hardware-configuration.nix"; then
+                log_error "Syntax error in hardware-configuration.nix"
+                return 1
+            fi
+            
+            # Create backup and copy
+            backup_file "/etc/nixos/hardware-configuration.nix"
+            safe_copy "hardware-configuration.nix" "/etc/nixos/hardware-configuration.nix"
+            hardware_handled=true
+            log_success "Hardware configuration copied from repository"
+        else
+            log_error "hardware-configuration.nix not found in repository"
             return 1
         fi
-        
-        # Create backup and copy
-        backup_file "/etc/nixos/hardware-configuration.nix"
-        safe_copy "hardware-configuration.nix" "/etc/nixos/hardware-configuration.nix"
+    else
+        # Default behavior - leave hardware configuration unchanged
+        log_info "Hardware configuration left unchanged (default behavior)"
+        if [[ ! -f "/etc/nixos/hardware-configuration.nix" ]]; then
+            log_warning "No existing hardware-configuration.nix found"
+            log_info "Consider using --auto-hardware to generate one"
+            log_info "Or run 'sudo nixos-generate-config' manually"
+        else
+            log_info "Using existing /etc/nixos/hardware-configuration.nix"
+        fi
         hardware_handled=true
-        log_success "Hardware configuration copied from repository"
     fi
     
     # Check file syntax before installation
@@ -863,13 +888,14 @@ final_report() {
             else
                 echo "  ✓ /etc/nixos/hardware-configuration.nix (auto-generated)"
             fi
-        elif [[ "$SKIP_HARDWARE_COPY" == "true" ]]; then
-            echo "  ✓ /etc/nixos/hardware-configuration.nix (existing, not modified)"
-        else
+        elif [[ "$COPY_HARDWARE_FROM_REPO" == "true" ]]; then
             echo "  ✓ /etc/nixos/hardware-configuration.nix (copied from repository)"
+        else
+            echo "  ✓ /etc/nixos/hardware-configuration.nix (existing, unchanged)"
         fi
     else
         echo "  ⚠ /etc/nixos/hardware-configuration.nix (missing)"
+        echo "    Run: sudo nixos-generate-config or use --auto-hardware option"
     fi
     
     # Check user files
