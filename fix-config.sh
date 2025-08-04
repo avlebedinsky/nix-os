@@ -34,11 +34,13 @@ echo -e "${YELLOW}Исправление устаревших опций...${NC}
 # Временный файл для исправленной конфигурации
 TEMP_FILE=$(mktemp)
 
-# Удаление sound.enable и исправление hardware.opengl
+# Удаление sound.enable и исправление hardware.opengl, hardware.pulseaudio, thunar
 sed -e '/sound\.enable/d' \
     -e 's/hardware\.opengl/hardware.graphics/g' \
     -e 's/driSupport/enable32Bit/g' \
     -e '/driSupport32Bit/d' \
+    -e 's/hardware\.pulseaudio/services.pulseaudio/g' \
+    -e 's/^\s*thunar$/    xfce.thunar/' \
     "$CONFIG_FILE" > "$TEMP_FILE"
 
 # Проверка изменений

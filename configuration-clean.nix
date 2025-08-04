@@ -56,7 +56,7 @@
 
   # Enable sound with pipewire.
   # Note: sound.enable removed in NixOS 24.05+
-  hardware.pulseaudio.enable = false;
+  services.pulseaudio.enable = false;
   security.rtkit.enable = true;
   services.pipewire = {
     enable = true;
@@ -120,7 +120,7 @@
     slurp
     
     # File manager
-    thunar
+    xfce.thunar
     
     # System utilities
     htop

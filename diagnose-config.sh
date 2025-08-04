@@ -65,6 +65,20 @@ if [[ -f "$CONFIG_FILE" ]]; then
         echo -e "${GREEN}✓ hardware.opengl не найдена${NC}"
     fi
     
+    if grep -q "hardware.pulseaudio" "$CONFIG_FILE"; then
+        echo -e "${YELLOW}⚠ Найдена опция hardware.pulseaudio (должна быть services.pulseaudio)${NC}"
+        echo "  Строка: $(grep -n "hardware.pulseaudio" "$CONFIG_FILE")"
+    else
+        echo -e "${GREEN}✓ hardware.pulseaudio не найдена${NC}"
+    fi
+    
+    if grep -q "^\s*thunar$" "$CONFIG_FILE"; then
+        echo -e "${YELLOW}⚠ Найден пакет thunar (должен быть xfce.thunar)${NC}"
+        echo "  Строка: $(grep -n "^\s*thunar$" "$CONFIG_FILE")"
+    else
+        echo -e "${GREEN}✓ thunar корректно указан${NC}"
+    fi
+    
 else
     echo -e "${RED}✗ Файл конфигурации не найден: $CONFIG_FILE${NC}"
 fi
