@@ -114,7 +114,7 @@
     starship
     
     # File manager
-    thunar
+    xfce.thunar
     
     # Screenshots
     grim

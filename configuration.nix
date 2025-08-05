@@ -78,7 +78,7 @@
     grim
     slurp
     wl-clipboard
-    thunar
+    xfce.thunar
     
     # Basic utilities
     brightnessctl
