@@ -87,7 +87,7 @@
 
   # Fonts configuration
   fonts.packages = with pkgs; [
-    nerdfonts
+    (nerdfonts.override { fonts = [ "JetBrainsMono" ]; })
     jetbrains-mono
     dejavu_fonts
     liberation_ttf

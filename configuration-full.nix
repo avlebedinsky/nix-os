@@ -135,7 +135,7 @@
 
   # Fonts
   fonts.packages = with pkgs; [
-    nerdfonts
+    (nerdfonts.override { fonts = [ "JetBrainsMono" "FiraCode" "DejaVuSansMono" ]; })
     jetbrains-mono
     fira-code
     liberation_ttf
