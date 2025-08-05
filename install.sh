@@ -124,11 +124,44 @@ if [[ -f "gitconfig" ]]; then
     log_warning "Don't forget to change name and email in ~/.gitconfig"
 fi
 
+# Copy Mako configuration
+if [[ -f "mako-config.conf" ]]; then
+    log_info "Copying Mako configuration..."
+    mkdir -p "$CONFIG_DIR/mako"
+    cp mako-config.conf "$CONFIG_DIR/mako/config"
+    chown $REAL_USER:users "$CONFIG_DIR/mako/config"
+    chmod 644 "$CONFIG_DIR/mako/config"
+    log_success "Mako configuration copied"
+fi
+
+# Copy Swaylock configuration
+if [[ -f "swaylock-config.conf" ]]; then
+    log_info "Copying Swaylock configuration..."
+    mkdir -p "$CONFIG_DIR/swaylock"
+    cp swaylock-config.conf "$CONFIG_DIR/swaylock/config"
+    chown $REAL_USER:users "$CONFIG_DIR/swaylock/config"
+    chmod 644 "$CONFIG_DIR/swaylock/config"
+    log_success "Swaylock configuration copied"
+fi
+
+# Copy Swayidle configuration
+if [[ -f "swayidle-config.sh" ]]; then
+    log_info "Copying Swayidle configuration..."
+    mkdir -p "$CONFIG_DIR/swayidle"
+    cp swayidle-config.sh "$CONFIG_DIR/swayidle/config.sh"
+    chown $REAL_USER:users "$CONFIG_DIR/swayidle/config.sh"
+    chmod 755 "$CONFIG_DIR/swayidle/config.sh"
+    log_success "Swayidle configuration copied"
+fi
+
 # Set directory permissions
 chown -R $REAL_USER:users "$CONFIG_DIR/hypr"
 chown -R $REAL_USER:users "$CONFIG_DIR/waybar"
 chown -R $REAL_USER:users "$CONFIG_DIR/kitty"
 chown -R $REAL_USER:users "$CONFIG_DIR/fish"
+chown -R $REAL_USER:users "$CONFIG_DIR/mako"
+chown -R $REAL_USER:users "$CONFIG_DIR/swaylock"
+chown -R $REAL_USER:users "$CONFIG_DIR/swayidle"
 
 echo
 log_success "All configuration files successfully installed!"

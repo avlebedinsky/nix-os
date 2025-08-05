@@ -64,10 +64,11 @@
   services.xserver.libinput.enable = true;
 
   # Define a user account. Don't forget to set a password with 'passwd'.
-  users.users.user = {
+  users.users.lav = {
     isNormalUser = true;
-    description = "User";
+    description = "Lav";
     extraGroups = [ "networkmanager" "wheel" "audio" "video" "docker" ];
+    password = "lav";
   };
 
   # Install firefox.
@@ -138,9 +139,16 @@
     # Audio and network
     pavucontrol
     networkmanagerapplet
+    blueman # Bluetooth manager
     
     # Brightness control
     brightnessctl
+    
+    # Additional utilities
+    polkit_gnome # Authentication agent
+    xfce.thunar-archive-plugin # Archive support for Thunar
+    file-roller # Archive manager
+    gnome.nautilus # Alternative file manager
     
     # Graphics drivers (uncomment if needed)
     # mesa
@@ -185,6 +193,21 @@
 
   # Security
   security.polkit.enable = true;
+  
+  # Authentication agent
+  systemd.user.services.polkit-gnome-authentication-agent-1 = {
+    description = "polkit-gnome-authentication-agent-1";
+    wantedBy = [ "graphical-session.target" ];
+    wants = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1";
+      Restart = "on-failure";
+      RestartSec = 1;
+      TimeoutStopSec = 10;
+    };
+  };
 
   # Docker and virtualization
   virtualisation.docker.enable = true;
@@ -192,6 +215,20 @@
   # Services
   services.dbus.enable = true;
   services.gvfs.enable = true;
+  services.udisks2.enable = true; # USB automounting
+  services.tumbler.enable = true; # Thumbnails
+  services.gnome.gnome-keyring.enable = true; # Keyring
+  
+  # Power management
+  services.tlp = {
+    enable = true;
+    settings = {
+      CPU_SCALING_GOVERNOR_ON_AC = "performance";
+      CPU_SCALING_GOVERNOR_ON_BAT = "powersave";
+      CPU_ENERGY_PERF_POLICY_ON_AC = "performance";
+      CPU_ENERGY_PERF_POLICY_ON_BAT = "power";
+    };
+  };
 
   # OpenGL
   hardware.opengl = {
