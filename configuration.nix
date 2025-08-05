@@ -69,8 +69,7 @@
     git
     firefox
     
-    # Hyprland essentials
-    hyprland
+    # Wayland essentials
     waybar
     kitty
     rofi-wayland
@@ -84,15 +83,14 @@
     brightnessctl
     pavucontrol
     networkmanagerapplet
-    
-    # Fonts
-    nerdfonts
   ];
 
   # Fonts configuration
   fonts.packages = with pkgs; [
     nerdfonts
     jetbrains-mono
+    dejavu_fonts
+    liberation_ttf
   ];
 
   # Hyprland
@@ -105,6 +103,7 @@
   xdg.portal = {
     enable = true;
     extraPortals = [ pkgs.xdg-desktop-portal-hyprland ];
+    config.common.default = "*";
   };
 
   # Graphics

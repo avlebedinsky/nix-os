@@ -99,9 +99,7 @@
     qbittorrent
     chromium
     
-    # Hyprland and Wayland
-    hyprland
-    xdg-desktop-portal-hyprland
+    # Wayland and desktop
     waybar
     rofi-wayland
     mako
@@ -140,7 +138,6 @@
     nerdfonts
     jetbrains-mono
     fira-code
-    font-awesome
     liberation_ttf
     dejavu_fonts
   ];
@@ -156,6 +153,7 @@
   xdg.portal = {
     enable = true;
     extraPortals = [ pkgs.xdg-desktop-portal-hyprland ];
+    config.common.default = "*";
   };
 
   # Environment variables for Wayland
