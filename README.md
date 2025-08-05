@@ -5,7 +5,8 @@
 ## Файлы конфигурации
 
 ### Основные файлы
-- `configuration.nix` - основная конфигурация NixOS
+- `configuration.nix` - минимальная стабильная конфигурация NixOS
+- `configuration-full.nix` - полная конфигурация со всеми возможностями
 - `hyprland.conf` - конфигурация оконного менеджера Hyprland
 - `waybar-config.json` - конфигурация панели Waybar
 - `waybar-style.css` - стили для Waybar
