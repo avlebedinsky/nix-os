@@ -86,7 +86,13 @@
     networkmanagerapplet
     
     # Fonts
-    (nerdfonts.override { fonts = [ "JetBrainsMono" ]; })
+    nerdfonts
+  ];
+
+  # Fonts configuration
+  fonts.packages = with pkgs; [
+    nerdfonts
+    jetbrains-mono
   ];
 
   # Hyprland

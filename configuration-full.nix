@@ -137,7 +137,7 @@
 
   # Fonts
   fonts.packages = with pkgs; [
-    (nerdfonts.override { fonts = [ "JetBrainsMono" "FiraCode" ]; })
+    nerdfonts
     jetbrains-mono
     fira-code
     font-awesome
