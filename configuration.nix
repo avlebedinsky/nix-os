@@ -72,6 +72,7 @@
     # Wayland essentials
     waybar
     kitty
+    foot  # Alternative terminal
     rofi-wayland
     mako
     grim
